@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #06070a;
+  --color-surface: #12141c;
+  --color-surface-2: #1b1e29;
+  --color-line: #2a2f3f;
+  --color-prep: #f5a524;
+  --color-work: #2ee66b;
+  --color-rest: #38a8f5;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ink);
+  color: #f4f6fb;
+  -webkit-font-smoothing: antialiased;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* Timer digits must never be selected by a stray long-press mid-set. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tabular figures stop the countdown from jittering as digits change width. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
