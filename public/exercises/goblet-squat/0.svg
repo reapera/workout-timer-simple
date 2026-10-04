@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="Goblet squat, start: standing tall with one dumbbell held upright against the chest">
+  <rect width="600" height="400" fill="#1b1e29"/>
+  <line x1="40" y1="362" x2="560" y2="362" stroke="#2a2f3f" stroke-width="4"/>
+  <g fill="none" stroke="#e8ebf3" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="286" y1="355" x2="336" y2="355" stroke-width="14"/>
+    <polyline points="300,350 300,270 300,192" stroke-width="18"/>
+    <line x1="300" y1="190" x2="300" y2="104" stroke-width="30"/>
+    <polyline points="304,110 320,152 334,124" stroke-width="14"/>
+  </g>
+  <circle cx="303" cy="66" r="26" fill="#e8ebf3"/>
+  <line x1="342" y1="104" x2="342" y2="142" stroke="#c7cdd9" stroke-width="8" stroke-linecap="round"/>
+  <rect x="326" y="90" width="32" height="15" rx="4" fill="#f5a524"/>
+  <rect x="326" y="141" width="32" height="15" rx="4" fill="#f5a524"/>
+</svg>

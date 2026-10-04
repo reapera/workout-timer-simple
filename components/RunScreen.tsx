@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { logSession, type LogResult } from "@/lib/client";
+import { localDate } from "@/lib/training/schedule";
 import { useTimer, type CompletedExercise } from "@/lib/useTimer";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { formatClock, formatDuration, type Routine } from "@/lib/types";
@@ -13,9 +14,17 @@ const PHASE = {
   rest: { label: "Rest", color: "var(--color-rest)" },
 } as const;
 
-type Props = { routine: Routine; onExit: () => void };
+type Props = {
+  routine: Routine;
+  onExit: () => void;
+  /**
+   * Embedded use (the warm-up inside a workout): called when the routine ends,
+   * however it ends, instead of showing the summary or logging a session.
+   */
+  onComplete?: () => void;
+};
 
-export function RunScreen({ routine, onExit }: Props) {
+export function RunScreen({ routine, onExit, onComplete }: Props) {
   const [summary, setSummary] = useState<{
     completed: CompletedExercise[];
     elapsedSeconds: number;
@@ -24,6 +33,10 @@ export function RunScreen({ routine, onExit }: Props) {
 
   const handleFinish = useCallback(
     async (result: { completed: CompletedExercise[]; elapsedSeconds: number }) => {
+      if (onComplete) {
+        onComplete();
+        return;
+      }
       setSummary(result);
 
       if (!result.completed.length) {
@@ -39,10 +52,11 @@ export function RunScreen({ routine, onExit }: Props) {
           completed: result.completed,
           plannedCount: routine.exercises.length,
           elapsedSeconds: result.elapsedSeconds,
+          date: localDate(),
         }),
       );
     },
-    [routine],
+    [routine, onComplete],
   );
 
   const timer = useTimer({ exercises: routine.exercises, onFinish: handleFinish });

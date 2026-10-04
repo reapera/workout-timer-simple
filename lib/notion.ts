@@ -2,10 +2,11 @@ import "server-only";
 
 import type { Exercise, Routine } from "./types";
 
-const NOTION_API = "https://api.notion.com/v1";
+// Overridable so a local fake can stand in for Notion during development.
+const NOTION_API = process.env.NOTION_API_BASE ?? "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
 
-function env(name: string): string {
+export function env(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new NotionConfigError(
@@ -26,7 +27,7 @@ export class NotionApiError extends Error {
   }
 }
 
-async function notion<T>(
+export async function notion<T>(
   path: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
@@ -63,36 +64,36 @@ async function notion<T>(
  * Property readers
  * ------------------------------------------------------------------ */
 
-type NotionPage = {
+export type NotionPage = {
   id: string;
   properties: Record<string, any>;
 };
 
-function readTitle(page: NotionPage, key: string): string {
+export function readTitle(page: NotionPage, key: string): string {
   const parts = page.properties?.[key]?.title ?? [];
   return parts.map((part: any) => part.plain_text).join("").trim();
 }
 
-function readNumber(page: NotionPage, key: string): number | null {
+export function readNumber(page: NotionPage, key: string): number | null {
   const value = page.properties?.[key]?.number;
   return typeof value === "number" ? value : null;
 }
 
-function readCheckbox(page: NotionPage, key: string): boolean {
+export function readCheckbox(page: NotionPage, key: string): boolean {
   return page.properties?.[key]?.checkbox === true;
 }
 
-function readDate(page: NotionPage, key: string): string | null {
+export function readDate(page: NotionPage, key: string): string | null {
   return page.properties?.[key]?.date?.start ?? null;
 }
 
-function readRelationIds(page: NotionPage, key: string): string[] {
+export function readRelationIds(page: NotionPage, key: string): string[] {
   const relation = page.properties?.[key]?.relation ?? [];
   return relation.map((item: { id: string }) => item.id);
 }
 
 /** Notion returns ids with dashes; incoming env vars may not have them. */
-function normalizeId(id: string): string {
+export function normalizeId(id: string): string {
   return id.replace(/-/g, "");
 }
 
@@ -100,7 +101,7 @@ function normalizeId(id: string): string {
  * Queries
  * ------------------------------------------------------------------ */
 
-async function queryAll(
+export async function queryAll(
   databaseId: string,
   body: Record<string, unknown> = {},
 ): Promise<NotionPage[]> {
@@ -179,7 +180,7 @@ export async function getRoutine(id: string): Promise<Routine | null> {
  * Notion's rate limit is ~3 requests/second. Exercise writes fan out one
  * request per row, so cap concurrency rather than firing the whole list.
  */
-async function inBatches<T>(items: T[], size: number, task: (item: T) => Promise<unknown>) {
+export async function inBatches<T>(items: T[], size: number, task: (item: T) => Promise<unknown>) {
   for (let i = 0; i < items.length; i += size) {
     await Promise.all(items.slice(i, i + size).map(task));
   }
@@ -337,6 +338,8 @@ export type SessionLog = {
   plannedCount: number;
   /** Wall-clock seconds from start to finish, including prep and rest. */
   elapsedSeconds: number;
+  /** The phone's calendar date (YYYY-MM-DD); the server's clock is UTC. */
+  date?: string;
 };
 
 /**
@@ -347,7 +350,7 @@ export type SessionLog = {
  */
 export async function logSession(session: SessionLog): Promise<{ id: string }> {
   const workSeconds = session.completed.reduce((sum, item) => sum + item.duration, 0);
-  const date = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
+  const date = session.date ?? new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
 
   const breakdown = session.completed
     .map((item) => `${item.name} ${item.duration}s`)
@@ -372,13 +375,16 @@ export async function logSession(session: SessionLog): Promise<{ id: string }> {
   });
 
   // Best-effort: a failed timestamp must not fail an otherwise-logged session.
-  try {
-    await notion(`/pages/${session.routineId}`, {
-      method: "PATCH",
-      body: { properties: { "Last Used": { date: { start: date } } } },
-    });
-  } catch {
-    // Ignored on purpose.
+  // Built-in routines (warm-up, back care) have no Notion page to stamp.
+  if (!session.routineId.startsWith("builtin-")) {
+    try {
+      await notion(`/pages/${session.routineId}`, {
+        method: "PATCH",
+        body: { properties: { "Last Used": { date: { start: date } } } },
+      });
+    } catch {
+      // Ignored on purpose.
+    }
   }
 
   return { id: page.id };

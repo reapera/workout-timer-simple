@@ -10,7 +10,7 @@ function parseSession(input: unknown): SessionLog {
     throw new ValidationError("Expected a JSON object");
   }
 
-  const { routineId, routineName, completed, plannedCount, elapsedSeconds } =
+  const { routineId, routineName, completed, plannedCount, elapsedSeconds, date } =
     input as Record<string, unknown>;
 
   if (typeof routineId !== "string" || !routineId) {
@@ -35,8 +35,11 @@ function parseSession(input: unknown): SessionLog {
     }),
     plannedCount: Math.max(completed.length, Math.round(Number(plannedCount) || 0)),
     elapsedSeconds: Math.max(0, Math.round(Number(elapsedSeconds) || 0)),
+    date: typeof date === "string" && ISO_DATE.test(date) ? date : undefined,
   };
 }
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: Request) {
   try {

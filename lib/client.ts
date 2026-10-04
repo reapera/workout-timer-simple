@@ -6,7 +6,7 @@ const ROUTINES_KEY = "wt.routines.v1";
 const LAST_PICKED_KEY = "wt.lastRoutineId.v1";
 const LOG_QUEUE_KEY = "wt.pendingLogs.v1";
 
-function readJson<T>(key: string): T | null {
+export function readJson<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(key);
@@ -16,7 +16,7 @@ function readJson<T>(key: string): T | null {
   }
 }
 
-function writeJson(key: string, value: unknown) {
+export function writeJson(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
@@ -27,7 +27,7 @@ function writeJson(key: string, value: unknown) {
 
 export type ApiFailure = { message: string; kind: "config" | "notion" | "unknown" };
 
-async function readError(response: Response): Promise<ApiFailure> {
+export async function readError(response: Response): Promise<ApiFailure> {
   try {
     const body = (await response.json()) as { error?: string; kind?: ApiFailure["kind"] };
     return {
@@ -148,6 +148,8 @@ export type PendingLog = {
   completed: Array<{ name: string; duration: number }>;
   plannedCount: number;
   elapsedSeconds: number;
+  /** Local calendar date, so a 6am session isn't filed under yesterday's UTC date. */
+  date?: string;
 };
 
 async function postLog(session: PendingLog): Promise<boolean> {

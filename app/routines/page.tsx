@@ -47,8 +47,8 @@ export default function RoutinesPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <header className="flex items-center justify-between">
-        <Link href="/" className="text-sm text-white/50 transition hover:text-white">
-          ← Home
+        <Link href="/timer" className="text-sm text-white/50 transition hover:text-white">
+          ← Timer
         </Link>
         <h1 className="font-semibold text-white">Routines</h1>
       </header>

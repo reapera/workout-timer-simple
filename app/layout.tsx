@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Workout Timer",
-  description: "A spoken interval timer for timed workout routines.",
+  description: "A home dumbbell plan that progresses with you, plus a spoken interval timer.",
 };
 
 export const viewport: Viewport = {

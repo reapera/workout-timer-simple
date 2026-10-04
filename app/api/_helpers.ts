@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
 
 import { NotionApiError, NotionConfigError } from "@/lib/notion";
+import { ConflictError, TrainingSetupError } from "@/lib/training/notion";
+import { InputError } from "@/lib/training/validate";
 import type { Exercise } from "@/lib/types";
 
 export function apiError(error: unknown) {
+  if (error instanceof InputError) {
+    return NextResponse.json({ error: error.message, kind: "unknown" }, { status: 400 });
+  }
+  if (error instanceof ConflictError) {
+    return NextResponse.json({ error: error.message, kind: "unknown" }, { status: 409 });
+  }
+  if (error instanceof TrainingSetupError) {
+    return NextResponse.json(
+      { error: error.message, kind: "setup", reason: error.reason, missing: error.missing },
+      { status: 409 },
+    );
+  }
   if (error instanceof NotionConfigError) {
     return NextResponse.json({ error: error.message, kind: "config" }, { status: 503 });
   }
