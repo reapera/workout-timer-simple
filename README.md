@@ -99,10 +99,11 @@ The database IDs in `.env.example` are already filled in for this workspace:
 
 ### Training databases
 
-The first time you tap **Create my plan**, the app adds three databases to the Health Tracker
-page, next to the Workout Log. It finds them by name after that, so no new environment variables
-are needed. It never deletes, renames or changes existing columns. If a column it needs is
-missing it adds it; if one has the wrong type it stops and says which.
+Three databases sit on the Health Tracker page, next to the Workout Log. They already exist in
+this workspace, and the app finds them by name, so no new environment variables are needed. If
+one is missing, **Create my plan** creates it. The app never deletes, renames or changes
+existing columns. If a column it needs is missing it adds it; if one has the wrong type it stops
+and says which.
 
 **Training Programme**: one row, your plan. `Start Date`, `Training Days`, `Back Care Days`,
 `Handles`, `Handle Weight (kg)`, `Plates` (e.g. `1.25×4, 1.5×4, 2×4`), `Plates Per Side`,
