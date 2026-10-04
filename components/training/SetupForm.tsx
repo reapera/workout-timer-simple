@@ -225,6 +225,23 @@ export function SetupForm() {
         </p>
       </Section>
 
+      {editing && (
+        <Section title="Exercises">
+          <Link
+            href="/workouts"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-3"
+          >
+            <span>
+              <span className="block text-sm font-medium text-white">Edit your workouts</span>
+              <span className="block text-xs text-white/45">
+                Swap, add or remove exercises, change sets, reps and rest, or go dumbbell-only.
+              </span>
+            </span>
+            <span className="shrink-0 text-sm text-white/50">→</span>
+          </Link>
+        </Section>
+      )}
+
       <Section title="Reminders">
         <Row label="Remind me at" hint="On training and back care days">
           <input

@@ -1,4 +1,4 @@
-import { getExercise } from "./exercises";
+import { getExercise, type ExerciseDef, type Pattern, type Prescription } from "./exercises";
 import type { Equipment, Level, Slot, WorkoutKey } from "./types";
 
 /**
@@ -62,6 +62,70 @@ export function substitute(exerciseId: string, equipment: Equipment): string {
   }
   if (equipment.bench && exerciseId === "floor-press") return "bench-press";
   return exerciseId;
+}
+
+/** What a newly added exercise starts with: its own default, the plan's, or one by kind. */
+export function prescriptionFor(exercise: ExerciseDef): Prescription {
+  if (exercise.prescription) return exercise.prescription;
+  const entry = PROGRAMME.find((candidate) => candidate.exerciseId === canonicalExercise(exercise.id));
+  if (entry) return { sets: entry.sets, reps: entry.reps, seconds: entry.seconds, rest: entry.rest };
+  if (exercise.kind === "timed") return { sets: 2, seconds: [20, 45], rest: 45 };
+  return exercise.load === "none" ? { sets: 2, reps: [8, 12], rest: 45 } : { sets: 3, reps: [10, 15], rest: 90 };
+}
+
+/** Loaded lifts start by finding your weight; bodyweight moves start at 0. */
+export function startingWeight(exercise: ExerciseDef): number | null {
+  return exercise.load === "none" || exercise.bodyweightStart ? 0 : null;
+}
+
+/** A programme row for an exercise added to a workout. */
+export function seedFor(exerciseId: string, workout: WorkoutKey, order: number): SlotSeed {
+  const exercise = getExercise(exerciseId);
+  const prescription = prescriptionFor(exercise);
+  return {
+    exerciseId,
+    workout,
+    order,
+    sets: prescription.sets,
+    ...targetsFor(exercise, prescription),
+    rest: prescription.rest,
+    weight: startingWeight(exercise),
+    stretch: 0,
+    stalls: 0,
+  };
+}
+
+/** Reps for counted moves, seconds for holds; the other pair is cleared. */
+export function targetsFor(
+  exercise: ExerciseDef,
+  prescription: Prescription = prescriptionFor(exercise),
+): Pick<Slot, "repMin" | "repMax" | "seconds" | "maxSeconds"> {
+  if (exercise.kind === "timed") {
+    const [seconds, maxSeconds] = prescription.seconds ?? [20, 45];
+    return { repMin: null, repMax: null, seconds, maxSeconds };
+  }
+  const [repMin, repMax] = prescription.reps ?? [8, 12];
+  return { repMin, repMax, seconds: null, maxSeconds: null };
+}
+
+const SHORT_NAMES: Record<Pattern, string> = {
+  squat: "Squat",
+  lunge: "Lunge",
+  hinge: "Hinge",
+  glutes: "Glutes",
+  push: "Press",
+  overhead: "Press",
+  pull: "Row",
+  arms: "Arms",
+  calves: "Calves",
+  core: "Core",
+  mobility: "Mobility",
+};
+
+/** "Squat · Press · Row": the first three kinds of move in a workout. */
+export function workoutName(slots: Slot[]): string {
+  const names = [...new Set(slots.map((slot) => SHORT_NAMES[getExercise(slot.exerciseId).pattern]))];
+  return names.slice(0, 3).join(" · ") || "No exercises yet";
 }
 
 export function buildSlots(equipment: Equipment): SlotSeed[] {

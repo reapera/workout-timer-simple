@@ -23,7 +23,7 @@ import { formatPlates, formatTarget } from "@/lib/training/format";
 import { BACK_CARE, BACK_CARE_ROUTINE } from "@/lib/training/routines";
 import { reviewDue } from "@/lib/training/review";
 import { buildToday, inDeload, localDate } from "@/lib/training/schedule";
-import { estimateMinutes, slotsFor, WORKOUT_NAMES } from "@/lib/training/template";
+import { estimateMinutes, slotsFor, workoutName } from "@/lib/training/template";
 import type { Equipment, Slot, TrainingData, WorkoutKey } from "@/lib/training/types";
 import { createWorkout, plannedLoad, type WorkoutState } from "@/lib/training/workout";
 
@@ -307,9 +307,12 @@ function Plan({
         </p>
       )}
 
-      <nav className="mt-auto flex justify-center gap-6 pt-8 text-sm text-white/45">
+      <nav className="mt-auto flex flex-wrap justify-center gap-x-6 gap-y-2 pt-8 text-sm text-white/45">
         <Link href="/setup" className="transition hover:text-white">
           Plan settings
+        </Link>
+        <Link href="/workouts" className="transition hover:text-white">
+          Edit workouts
         </Link>
         <Link href="/exercises" className="transition hover:text-white">
           Exercise guides
@@ -348,16 +351,24 @@ function WorkoutCard({
           : "border-[var(--color-line)] bg-[var(--color-surface)]/60"
       }`}
     >
-      <p
-        className={`text-xs font-semibold tracking-[0.15em] uppercase ${
-          highlighted ? "text-[var(--color-work)]" : "text-white/40"
-        }`}
-      >
-        {heading}
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p
+          className={`text-xs font-semibold tracking-[0.15em] uppercase ${
+            highlighted ? "text-[var(--color-work)]" : "text-white/40"
+          }`}
+        >
+          {heading}
+        </p>
+        <Link
+          href={`/workouts?w=${workout}`}
+          className="-mt-1 shrink-0 rounded-full border border-[var(--color-line)] px-3 py-1 text-xs text-white/60 transition hover:bg-white/5"
+        >
+          Edit
+        </Link>
+      </div>
       <h2 className="mt-1 text-2xl font-semibold text-white">Workout {workout}</h2>
       <p className="text-sm text-white/45">
-        {WORKOUT_NAMES[workout]} · about {minutes} min
+        {workoutName(slots)} · about {minutes} min
       </p>
 
       <ul className="mt-3 divide-y divide-[var(--color-line)]">

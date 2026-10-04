@@ -10,8 +10,30 @@ const unique = (ids: string[]) => [...new Set(ids)];
 const programme = buildSlots(DEFAULT_EQUIPMENT);
 
 const GROUPS = [
-  { title: `Workout A · ${WORKOUT_NAMES.A}`, ids: programme.filter((s) => s.workout === "A").map((s) => s.exerciseId) },
-  { title: `Workout B · ${WORKOUT_NAMES.B}`, ids: programme.filter((s) => s.workout === "B").map((s) => s.exerciseId) },
+  { title: `Starting plan · Workout A · ${WORKOUT_NAMES.A}`, ids: programme.filter((s) => s.workout === "A").map((s) => s.exerciseId) },
+  { title: `Starting plan · Workout B · ${WORKOUT_NAMES.B}`, ids: programme.filter((s) => s.workout === "B").map((s) => s.exerciseId) },
+  {
+    title: "More dumbbell exercises",
+    ids: [
+      "sumo-squat",
+      "reverse-lunge",
+      "step-up",
+      "floor-fly",
+      "lateral-raise",
+      "reverse-fly",
+      "dumbbell-curl",
+      "hammer-curl",
+      "floor-triceps-extension",
+      "calf-raise",
+      "farmer-carry",
+      "suitcase-carry",
+      "dumbbell-dead-bug",
+    ],
+  },
+  {
+    title: "Harder variations",
+    ids: ["bulgarian-split-squat", "single-leg-rdl", "single-leg-glute-bridge"],
+  },
   {
     title: "Swaps for your equipment",
     ids: ["bench-press", "floor-press-one-arm", "romanian-deadlift-single", "split-squat-goblet"],

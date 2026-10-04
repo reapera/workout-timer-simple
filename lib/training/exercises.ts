@@ -3,9 +3,9 @@
  *
  * Content lives in code (not Notion) because it is the same for everyone and
  * must work offline at home with no signal. Photos are start/end frames from
- * free-exercise-db (released under the Unlicense); `goblet-squat` and
- * `bird-dog` are simple drawings made for this app because that dataset has
- * no photos of them.
+ * free-exercise-db (released under the Unlicense). The goblet squat, bird dog,
+ * carries and dumbbell dead bug are simple drawings made for this app because
+ * that dataset has no usable photos of them.
  */
 
 export type LoadType =
@@ -16,9 +16,48 @@ export type LoadType =
   /** Bodyweight only. */
   | "none";
 
+/** What a move trains, used to offer similar swaps and to group the picker. */
+export type Pattern =
+  | "squat"
+  | "lunge"
+  | "hinge"
+  | "glutes"
+  | "push"
+  | "overhead"
+  | "pull"
+  | "arms"
+  | "calves"
+  | "core"
+  | "mobility";
+
+export const PATTERN_LABELS: Record<Pattern, string> = {
+  squat: "Squats",
+  lunge: "Lunges and single leg",
+  hinge: "Hip hinges",
+  glutes: "Glutes",
+  push: "Chest",
+  overhead: "Shoulders",
+  pull: "Upper back",
+  arms: "Arms",
+  calves: "Calves",
+  core: "Core and carries",
+  mobility: "Mobility",
+};
+
+/** Sets and targets for an exercise added to a workout. */
+export type Prescription = {
+  sets: number;
+  reps?: [number, number];
+  seconds?: [number, number];
+  rest: number;
+};
+
 export type ExerciseDef = {
   id: string;
   name: string;
+  pattern: Pattern;
+  /** Starting sets and targets when added to a workout; see `prescriptionFor`. */
+  prescription?: Prescription;
   /** Reps are counted, or a hold is timed. */
   kind: "reps" | "timed";
   load: LoadType;
@@ -51,6 +90,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "goblet-squat",
     name: "Goblet squat",
+    pattern: "squat",
     kind: "reps",
     load: "single",
     startGuess: 6,
@@ -72,6 +112,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "floor-press",
     name: "Floor press",
+    pattern: "push",
     kind: "reps",
     load: "pair",
     startGuess: 5,
@@ -92,6 +133,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "floor-press-one-arm",
     name: "One-arm floor press",
+    pattern: "push",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -111,6 +153,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "bench-press",
     name: "Bench press",
+    pattern: "push",
     kind: "reps",
     load: "pair",
     startGuess: 6,
@@ -128,6 +171,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "one-arm-row",
     name: "One-arm row",
+    pattern: "pull",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -151,6 +195,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "glute-bridge",
     name: "Glute bridge",
+    pattern: "glutes",
     kind: "reps",
     load: "single",
     bodyweightStart: true,
@@ -173,6 +218,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "dead-bug",
     name: "Dead bug",
+    pattern: "core",
     kind: "reps",
     load: "none",
     perSide: true,
@@ -194,6 +240,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "romanian-deadlift",
     name: "Romanian deadlift",
+    pattern: "hinge",
     kind: "reps",
     load: "pair",
     startGuess: 5,
@@ -215,6 +262,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "romanian-deadlift-single",
     name: "Romanian deadlift (one dumbbell)",
+    pattern: "hinge",
     kind: "reps",
     load: "single",
     startGuess: 8,
@@ -233,6 +281,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "split-squat",
     name: "Split squat",
+    pattern: "lunge",
     kind: "reps",
     load: "pair",
     perSide: true,
@@ -252,6 +301,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "split-squat-goblet",
     name: "Split squat (one dumbbell)",
+    pattern: "lunge",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -271,6 +321,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "shoulder-press",
     name: "One-arm shoulder press",
+    pattern: "overhead",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -291,6 +342,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "bird-dog",
     name: "Bird dog",
+    pattern: "core",
     kind: "reps",
     load: "none",
     perSide: true,
@@ -311,6 +363,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "side-plank",
     name: "Side plank",
+    pattern: "core",
     kind: "timed",
     load: "none",
     perSide: true,
@@ -333,6 +386,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "bulgarian-split-squat",
     name: "Bulgarian split squat",
+    pattern: "lunge",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -353,6 +407,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "single-leg-rdl",
     name: "Single-leg Romanian deadlift",
+    pattern: "hinge",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -373,6 +428,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "single-leg-glute-bridge",
     name: "Single-leg glute bridge",
+    pattern: "glutes",
     kind: "reps",
     load: "single",
     perSide: true,
@@ -391,11 +447,272 @@ const LIST: ExerciseDef[] = [
   },
 
   /* ---------------------------------------------------------------- *
+   * More dumbbell moves, for building your own workouts
+   * ---------------------------------------------------------------- */
+  {
+    id: "sumo-squat",
+    name: "Sumo squat",
+    pattern: "squat",
+    kind: "reps",
+    load: "single",
+    startGuess: 8,
+    prescription: { sets: 3, reps: [10, 15], rest: 90 },
+    muscles: ["Inner thighs", "Glutes", "Thighs"],
+    images: photos("sumo-squat"),
+    cues: [
+      "Stand with your feet wide and toes turned out, holding one dumbbell by its end between your legs.",
+      "Push your knees out and sit straight down, chest up and arms long.",
+      "Go as low as your back stays flat, then stand up by squeezing your glutes.",
+    ],
+    mistakes: ["Knees caving in — push them out over your toes.", "Leaning forward to reach lower."],
+    back: "The wide stance keeps your body upright, which is kind to your lower back. Brace before each rep.",
+    video: "dumbbell sumo squat form",
+  },
+  {
+    id: "reverse-lunge",
+    name: "Reverse lunge",
+    pattern: "lunge",
+    kind: "reps",
+    load: "pair",
+    perSide: true,
+    bodyweightStart: true,
+    prescription: { sets: 3, reps: [8, 12], rest: 90 },
+    muscles: ["Thighs", "Glutes"],
+    images: photos("reverse-lunge"),
+    cues: [
+      "Stand tall, a dumbbell in each hand (or none to start).",
+      "Take a long step back and lower until your back knee nearly touches the floor.",
+      "Push through your front heel to step back up. Finish all reps on one leg, then switch.",
+    ],
+    mistakes: ["Leaning forward over the front knee.", "Stepping back in a line, like a tightrope — keep your feet hip-width apart."],
+    back: "Stepping back is easier on your knees than stepping forward. Stay tall with your stomach braced.",
+    video: "dumbbell reverse lunge form",
+  },
+  {
+    id: "step-up",
+    name: "Step-up",
+    pattern: "lunge",
+    kind: "reps",
+    load: "pair",
+    perSide: true,
+    bodyweightStart: true,
+    prescription: { sets: 3, reps: [8, 12], rest: 90 },
+    muscles: ["Thighs", "Glutes", "Balance"],
+    images: photos("step-up"),
+    imageNote: "The photo uses a bench. The bottom stair or a solid box works; never a chair that can slide.",
+    cues: [
+      "Stand facing a stair or sturdy box, dumbbells at your sides (or none to start).",
+      "Put your whole foot on the step and push through that heel to stand up on it.",
+      "Step down slowly with the same leg leading. Finish all reps, then switch.",
+    ],
+    mistakes: ["Pushing off the floor with the back foot.", "Letting the front knee cave in."],
+    back: "Keep your chest up and step up with your leg, not by leaning forward.",
+    video: "dumbbell step up form",
+  },
+  {
+    id: "floor-fly",
+    name: "Floor fly",
+    pattern: "push",
+    kind: "reps",
+    load: "pair",
+    startGuess: 4.5,
+    prescription: { sets: 2, reps: [10, 15], rest: 60 },
+    muscles: ["Chest", "Shoulders"],
+    images: photos("floor-fly"),
+    imageNote: "The photo uses a bench. On the floor your elbows stop at the mat, which protects your shoulders.",
+    cues: [
+      "Lie on your back, knees bent, dumbbells above your chest with palms facing each other.",
+      "With a slight bend in your elbows, open your arms out to the sides until your elbows touch the floor.",
+      "Squeeze your chest to bring the dumbbells back together.",
+    ],
+    mistakes: ["Bending your elbows more and more until it turns into a press.", "Dropping fast into the floor."],
+    back: "Lying down with knees bent keeps your back flat and supported.",
+    video: "dumbbell floor fly form",
+  },
+  {
+    id: "lateral-raise",
+    name: "Lateral raise",
+    pattern: "overhead",
+    kind: "reps",
+    load: "pair",
+    startGuess: 2,
+    prescription: { sets: 2, reps: [10, 15], rest: 60 },
+    muscles: ["Shoulders"],
+    images: photos("lateral-raise"),
+    cues: [
+      "Stand tall with light dumbbells at your sides.",
+      "Raise your arms out to the sides, elbows slightly bent, until they're level with your shoulders.",
+      "Lower slowly. Light weights are normal here — even the empty handles.",
+    ],
+    mistakes: ["Swinging the weights up with your body.", "Shrugging your shoulders toward your ears."],
+    back: "Stand tall and don't lean back. Sitting on a chair works too.",
+    video: "dumbbell lateral raise form",
+  },
+  {
+    id: "reverse-fly",
+    name: "Seated reverse fly",
+    pattern: "pull",
+    kind: "reps",
+    load: "pair",
+    startGuess: 2,
+    prescription: { sets: 2, reps: [10, 15], rest: 60 },
+    muscles: ["Upper back", "Rear shoulders"],
+    images: photos("reverse-fly"),
+    imageNote: "The photo uses a bench. Sit on the edge of a chair the same way.",
+    cues: [
+      "Sit on the edge of a chair and lean forward until your chest is close to your thighs.",
+      "Let light dumbbells hang below you, palms facing each other.",
+      "Lift them out to the sides, squeezing your shoulder blades together, then lower slowly.",
+    ],
+    mistakes: ["Rounding your back.", "Using weights so heavy you have to swing them."],
+    back: "Resting your chest towards your thighs supports your back. Keep it flat rather than rounded.",
+    video: "seated bent over reverse fly dumbbell",
+  },
+  {
+    id: "dumbbell-curl",
+    name: "Biceps curl",
+    pattern: "arms",
+    kind: "reps",
+    load: "pair",
+    startGuess: 4.5,
+    prescription: { sets: 2, reps: [10, 15], rest: 60 },
+    muscles: ["Biceps", "Forearms"],
+    images: photos("dumbbell-curl"),
+    cues: [
+      "Stand tall, a dumbbell in each hand, palms facing forward.",
+      "Keep your elbows by your sides and curl the dumbbells up to your shoulders.",
+      "Squeeze at the top, then lower slowly all the way down.",
+    ],
+    mistakes: ["Swinging your body to get the weight up.", "Elbows drifting forward."],
+    back: "Brace your stomach and don't lean back. If standing bothers your back, sit on a chair.",
+    video: "dumbbell bicep curl form",
+  },
+  {
+    id: "hammer-curl",
+    name: "Hammer curl",
+    pattern: "arms",
+    kind: "reps",
+    load: "pair",
+    startGuess: 4.5,
+    prescription: { sets: 2, reps: [10, 15], rest: 60 },
+    muscles: ["Biceps", "Forearms"],
+    images: photos("hammer-curl"),
+    cues: [
+      "Stand tall, a dumbbell in each hand, palms facing your body.",
+      "Keep your elbows by your sides and curl the dumbbells up, thumbs leading.",
+      "Lower slowly all the way down.",
+    ],
+    mistakes: ["Swinging your body.", "Letting your wrists bend back."],
+    back: "Brace your stomach and stand tall, or sit on a chair.",
+    video: "dumbbell hammer curl form",
+  },
+  {
+    id: "floor-triceps-extension",
+    name: "Lying triceps extension",
+    pattern: "arms",
+    kind: "reps",
+    load: "pair",
+    startGuess: 4.5,
+    prescription: { sets: 2, reps: [10, 15], rest: 60 },
+    muscles: ["Triceps"],
+    images: photos("floor-triceps-extension"),
+    imageNote: "The photo uses a bench. Lie on your mat with your knees bent — it's easier on your back.",
+    cues: [
+      "Lie on your back, knees bent, dumbbells held straight up above your chest.",
+      "Keep your upper arms still and bend your elbows to lower the dumbbells beside your head.",
+      "Straighten your arms to lift them back up.",
+    ],
+    mistakes: ["Elbows flaring out wide.", "Lowering fast — control it near your head."],
+    back: "Lying on the floor with knees bent keeps your lower back flat and supported.",
+    video: "lying dumbbell triceps extension floor",
+  },
+  {
+    id: "calf-raise",
+    name: "Calf raise",
+    pattern: "calves",
+    kind: "reps",
+    load: "pair",
+    bodyweightStart: true,
+    prescription: { sets: 2, reps: [12, 20], rest: 45 },
+    muscles: ["Calves"],
+    images: photos("calf-raise"),
+    cues: [
+      "Stand tall with your feet hip-width apart, dumbbells at your sides (or none to start).",
+      "Rise up onto the balls of your feet as high as you can and pause for a second.",
+      "Lower slowly until your heels touch the floor.",
+    ],
+    mistakes: ["Bouncing quickly through the reps.", "Rolling out onto the edges of your feet."],
+    video: "dumbbell calf raise form",
+  },
+  {
+    id: "farmer-carry",
+    name: "Farmer carry",
+    pattern: "core",
+    kind: "timed",
+    load: "pair",
+    startGuess: 8,
+    prescription: { sets: 2, seconds: [20, 45], rest: 60 },
+    muscles: ["Grip", "Core", "Upper back"],
+    images: drawing("farmer-carry"),
+    cues: [
+      "Squat down to pick up a dumbbell in each hand, back flat, and stand up tall.",
+      "Shoulders back and down, stomach braced, eyes ahead.",
+      "Walk slowly around the room with short steps for the time — or march on the spot if space is tight.",
+      "Squat down to put them back on the floor.",
+    ],
+    mistakes: ["Leaning back or shrugging your shoulders up.", "Rushing — slow, steady steps."],
+    back: "Carrying weight while standing tall trains the muscles that protect your back. Pick up and put down with a flat back, never by bending over.",
+    video: "dumbbell farmer carry form",
+  },
+  {
+    id: "suitcase-carry",
+    name: "Suitcase carry",
+    pattern: "core",
+    kind: "timed",
+    load: "single",
+    perSide: true,
+    startGuess: 8,
+    prescription: { sets: 2, seconds: [20, 45], rest: 60 },
+    muscles: ["Obliques", "Core", "Grip"],
+    images: drawing("suitcase-carry"),
+    cues: [
+      "Pick up one dumbbell in one hand, like carrying a suitcase, and stand up tall.",
+      "Don't lean towards or away from the weight — stay perfectly upright.",
+      "Walk slowly for the time (or march on the spot), then switch hands.",
+    ],
+    mistakes: ["Leaning to one side.", "Letting the shoulder holding the weight drop."],
+    back: "A favourite of back specialists: the side muscles that keep you from tipping are the ones that keep your spine steady. It works like a side plank you can load.",
+    video: "suitcase carry form",
+  },
+  {
+    id: "dumbbell-dead-bug",
+    name: "Dumbbell dead bug",
+    pattern: "core",
+    kind: "reps",
+    load: "single",
+    perSide: true,
+    startGuess: 2,
+    prescription: { sets: 2, reps: [6, 10], rest: 45 },
+    muscles: ["Deep core"],
+    images: drawing("dumbbell-dead-bug"),
+    cues: [
+      "Lie on your back holding one dumbbell by its ends straight above your chest.",
+      "Lift your knees to 90° above your hips and gently press your lower back into the floor.",
+      "Slowly straighten one leg towards the floor while the dumbbell stays still, then bring it back.",
+      "Switch legs. Count the reps on each side.",
+    ],
+    mistakes: ["Lower back lifting off the floor — make the movement smaller.", "Letting the dumbbell drift over your face."],
+    back: "Like the dead bug, with the dumbbell making your stomach work harder to keep your back still. Start with the empty handle.",
+    video: "dumbbell dead bug exercise",
+  },
+
+  /* ---------------------------------------------------------------- *
    * Warm-up and back care
    * ---------------------------------------------------------------- */
   {
     id: "march",
     name: "March in place",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     muscles: ["Whole body"],
@@ -407,6 +724,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "arm-circles",
     name: "Arm circles",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     muscles: ["Shoulders"],
@@ -418,6 +736,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "cat-cow",
     name: "Cat-cow",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     muscles: ["Spine mobility"],
@@ -434,6 +753,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "hip-hinge",
     name: "Hip hinge drill",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     muscles: ["Hamstrings", "Glutes"],
@@ -451,6 +771,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "bodyweight-squat",
     name: "Bodyweight squat",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     muscles: ["Thighs", "Glutes"],
@@ -463,6 +784,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "knee-to-chest",
     name: "Knee to chest stretch",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     perSide: true,
@@ -476,6 +798,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "hip-flexor-stretch",
     name: "Hip flexor stretch",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     perSide: true,
@@ -493,6 +816,7 @@ const LIST: ExerciseDef[] = [
   {
     id: "childs-pose",
     name: "Child's pose",
+    pattern: "mobility",
     kind: "timed",
     load: "none",
     muscles: ["Lower back", "Hips"],
@@ -530,6 +854,7 @@ export function getExercise(id: string): ExerciseDef {
     EXERCISES[id] ?? {
       id,
       name: id,
+      pattern: "core",
       kind: "reps",
       load: "none",
       muscles: [],
@@ -544,3 +869,11 @@ export function getExercise(id: string): ExerciseDef {
 export function videoUrl(exercise: ExerciseDef): string {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.video)}`;
 }
+
+/** Uses a dumbbell (now, or once bodyweight gets easy). */
+export function usesDumbbell(exercise: ExerciseDef): boolean {
+  return exercise.load !== "none";
+}
+
+/** Exercises that can go into a strength workout (not the warm-up stretches). */
+export const STRENGTH_EXERCISES: readonly ExerciseDef[] = LIST.filter((exercise) => exercise.pattern !== "mobility");

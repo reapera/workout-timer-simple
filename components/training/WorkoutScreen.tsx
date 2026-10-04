@@ -297,7 +297,7 @@ function SetView({
   const sideWord = perSideWord(definition);
 
   const target = timed
-    ? `Hold ${exercise.seconds ?? 0} s${definition.perSide ? " each side" : ""}`
+    ? `${definition.load === "none" ? "Hold" : "Carry"} ${exercise.seconds ?? 0} s${definition.perSide ? " each side" : ""}`
     : exercise.finding
       ? `As many good reps as you can (${exercise.repMin}–${exercise.repMax} is the goal)`
       : `Aim for ${aimFor(exercise, exercise.sets.length)} reps · range ${exercise.repMin}–${exercise.repMax}`;
@@ -341,6 +341,7 @@ function SetView({
           name={definition.name}
           seconds={exercise.seconds ?? 20}
           perSide={Boolean(definition.perSide)}
+          carry={definition.load !== "none"}
           onDone={(held) => dispatch({ type: "log-set", value: held, now: Date.now() })}
         />
       ) : (
@@ -433,8 +434,9 @@ function WeightPicker({
     <div className="mt-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] p-3">
       {exercise.finding && (
         <p className="mb-3 rounded-lg bg-[var(--color-prep)]/10 px-3 py-2 text-xs text-[var(--color-prep)]">
-          First time: pick a weight you could lift about 15 times with good form. Stop 2 reps before
-          it gets really hard — the app sets your working weight from what you log.
+          {definition.kind === "timed"
+            ? "First time: pick a weight you can carry for about 30 seconds while standing tall. The app sets your working weight from what you use."
+            : "First time: pick a weight you could lift about 15 times with good form. Stop 2 reps before it gets really hard — the app sets your working weight from what you log."}
         </p>
       )}
       <div className="flex items-center justify-between gap-3">
@@ -500,11 +502,14 @@ function HoldTimer({
   name,
   seconds,
   perSide,
+  carry,
   onDone,
 }: {
   name: string;
   seconds: number;
   perSide: boolean;
+  /** A carry with a dumbbell, rather than a hold in place. */
+  carry: boolean;
   onDone: (held: number) => void;
 }) {
   const [hold, setHold] = useState<Hold>({ kind: "ready" });
@@ -563,7 +568,7 @@ function HoldTimer({
     return (
       <div className="mt-6 text-center">
         <p className="text-sm text-white/50">
-          5 seconds to get into position, then hold for {seconds} s{perSide ? " on each side" : ""}.
+          5 seconds to get into position, then {carry ? "carry" : "hold"} for {seconds} s{perSide ? " on each side" : ""}.
         </p>
         <button
           onClick={() => {
@@ -575,7 +580,7 @@ function HoldTimer({
           }}
           className="mt-5 w-full rounded-2xl bg-[var(--color-work)] py-4 text-lg font-bold text-[var(--color-ink)] transition active:scale-95"
         >
-          Start hold
+          {carry ? "Start carry" : "Start hold"}
         </button>
       </div>
     );
@@ -592,7 +597,7 @@ function HoldTimer({
           {Math.ceil(left / 1000)}
         </span>
         <span className="mt-1 text-xs tracking-[0.2em] text-white/45 uppercase">
-          {hold.kind === "prep" ? "Get ready" : "Hold"}
+          {hold.kind === "prep" ? "Get ready" : carry ? "Carry" : "Hold"}
           {perSide ? (hold.side === 0 ? " · left" : " · right") : ""}
         </span>
       </Ring>
@@ -609,7 +614,7 @@ function HoldTimer({
         }}
         className="mt-5 rounded-2xl border border-[var(--color-line)] px-6 py-3 text-sm text-white/70 transition hover:bg-white/5"
       >
-        {hold.kind === "prep" ? "Cancel" : "Stop — log what I held"}
+        {hold.kind === "prep" ? "Cancel" : carry ? "Stop — log how long I carried" : "Stop — log what I held"}
       </button>
     </div>
   );

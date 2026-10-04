@@ -62,12 +62,14 @@ export function decide(
 
   // A deload week is deliberately light: it says nothing about progress, so
   // nothing changes. Finding a first working weight still happens.
-  const finding = exercise.kind === "reps" && exercise.load !== "none" && slot.weight === null;
+  const finding = exercise.load !== "none" && slot.weight === null;
   if (options.deload && !finding) {
     return { outcome: "hold", next: current, message: "Lighter week — back to your usual targets next week" };
   }
 
-  if (exercise.kind === "timed") return decideTimed(slot, log, current);
+  if (exercise.kind === "timed") {
+    return exercise.load === "none" ? decideTimed(slot, log, current) : decideLoadedHold(slot, log, ladder, current);
+  }
   if (exercise.load === "none") return decideBodyweight(slot, log, current);
   if (slot.weight === null) return calibrate(slot, log, ladder);
   return decideLoaded(slot, log, ladder, current);
@@ -224,12 +226,17 @@ function decideBodyweight(slot: Slot, log: ExerciseLog, current: SlotState): Dec
   return { outcome: "hold", next: current, message: "Aim for one more rep next time" };
 }
 
+/** Every planned set held for the target, with a second of slack for stopping on the final beep. */
+function heldEverySet(slot: Slot, log: ExerciseLog): boolean {
+  const target = slot.seconds ?? MIN_SECONDS;
+  const values = log.sets.map((set) => set.value);
+  return values.length >= log.plannedSets && values.every((value) => value >= target - 1);
+}
+
 function decideTimed(slot: Slot, log: ExerciseLog, current: SlotState): Decision {
   const target = slot.seconds ?? MIN_SECONDS;
   const ceiling = slot.maxSeconds ?? target;
-  const values = log.sets.map((set) => set.value);
-  // A second of slack: stopping on the final beep still counts.
-  const completed = values.length >= log.plannedSets && values.every((value) => value >= target - 1);
+  const completed = heldEverySet(slot, log);
 
   if (log.back === "pain") {
     const seconds = Math.max(MIN_SECONDS, target - SECONDS_STEP);
@@ -264,6 +271,55 @@ function decideTimed(slot: Slot, log: ExerciseLog, current: SlotState): Decision
     };
   }
   return { outcome: "hold", next: { ...current, stalls }, message: `Same ${target} s next time` };
+}
+
+/**
+ * Holds with a dumbbell (carries): the first session sets the weight; after
+ * that the time goes up 5 s at a time, and once the top time is held on every
+ * set, the next dumbbell up starts again from about half the time.
+ */
+function decideLoadedHold(slot: Slot, log: ExerciseLog, ladder: number[], current: SlotState): Decision {
+  const { weight } = workingSets(log.sets);
+  const target = slot.seconds ?? MIN_SECONDS;
+  const ceiling = slot.maxSeconds ?? target;
+
+  if (slot.weight === null) {
+    const next = log.back === "pain" ? stepDown(ladder, weight, BACK_OFF) : snapDown(ladder, weight);
+    return {
+      outcome: "set",
+      next: { ...current, weight: next, stretch: 0, stalls: 0 },
+      message: `Your working weight: ${formatKg(next)}`,
+    };
+  }
+
+  if (log.back === "pain") {
+    const next = stepDown(ladder, weight, BACK_OFF);
+    return {
+      outcome: "down",
+      next: { ...current, weight: next, stalls: 0 },
+      message: `Your back felt it — ${formatKg(next)} next time`,
+    };
+  }
+
+  if (target >= ceiling && heldEverySet(slot, log) && log.back !== "mild" && log.effort !== "too_hard") {
+    const up = stepUp(ladder, weight, MIN_STEP);
+    if (up === null) {
+      return {
+        outcome: "hold",
+        next: { ...current, weight, stalls: 0 },
+        message: `Top target reached — ${target} s with your heaviest setup`,
+      };
+    }
+    const restart = Math.max(MIN_SECONDS, Math.floor(ceiling / 2 / SECONDS_STEP) * SECONDS_STEP);
+    return {
+      outcome: "up",
+      next: { ...current, weight: up, seconds: restart, stalls: 0 },
+      message: `Next time: ${formatKg(up)} ↑ for ${restart} s`,
+    };
+  }
+
+  // Below the top time it works like any hold, at the weight actually carried.
+  return decideTimed(slot, log, { ...current, weight });
 }
 
 /* ------------------------------------------------------------------ *

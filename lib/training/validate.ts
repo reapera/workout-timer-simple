@@ -1,6 +1,6 @@
 import { DEFAULT_EQUIPMENT } from "./equipment";
 import { EXERCISES } from "./exercises";
-import { DAYS, type BackFeel, type DayName, type Effort, type Equipment, type ExerciseLog, type Level, type SessionLog } from "./types";
+import { DAYS, type BackFeel, type DayName, type Effort, type Equipment, type ExerciseLog, type Level, type SessionLog, type WorkoutKey } from "./types";
 
 /**
  * Guards for what the browser sends. Anything malformed is rejected before it
@@ -191,4 +191,83 @@ export function parseReview(input: unknown): ReviewInput {
   }
 
   return { block, today: raw.today, deload: raw.deload === true, swaps, schedule };
+}
+
+/* ------------------------------------------------------------------ *
+ * Editing the workouts
+ * ------------------------------------------------------------------ */
+
+/** One change to a programme exercise. Anything left out stays as it is. */
+export type SlotUpdate = {
+  id: string;
+  /** Swap for another exercise; its weight is found again. */
+  exerciseId?: string;
+  sets?: number;
+  repMin?: number;
+  repMax?: number;
+  seconds?: number;
+  maxSeconds?: number;
+  rest?: number;
+  /** kg per dumbbell; 0 = bodyweight; null = find it again next session. */
+  weight?: number | null;
+  order?: number;
+  /** Removed from the workout (kept in Notion, can be put back). */
+  archived?: boolean;
+};
+
+export type NewSlotInput = { workout: WorkoutKey; exerciseId: string };
+
+const ROW_ID = /^[A-Za-z0-9-]{1,64}$/;
+
+function strengthExercise(value: unknown): string {
+  if (typeof value !== "string" || !(value in EXERCISES) || EXERCISES[value].pattern === "mobility") {
+    throw new InputError("Unknown exercise");
+  }
+  return value;
+}
+
+export function parseSlotUpdates(input: unknown): SlotUpdate[] {
+  const raw = record(input, "a JSON object");
+  if (!Array.isArray(raw.updates) || !raw.updates.length) throw new InputError("Nothing to change");
+  if (raw.updates.length > 40) throw new InputError("Too many changes at once");
+
+  return raw.updates.map((item) => {
+    const change = record(item, "a change");
+    if (typeof change.id !== "string" || !ROW_ID.test(change.id)) throw new InputError("A change needs an exercise row id");
+    const update: SlotUpdate = { id: change.id };
+    const whole = (key: string, min: number, max: number) =>
+      change[key] === undefined ? undefined : Math.round(number(change[key], min, max));
+
+    if (change.exerciseId !== undefined) update.exerciseId = strengthExercise(change.exerciseId);
+    const fields = {
+      sets: whole("sets", 1, 6),
+      repMin: whole("repMin", 1, 50),
+      repMax: whole("repMax", 1, 60),
+      seconds: whole("seconds", 5, 300),
+      maxSeconds: whole("maxSeconds", 5, 600),
+      rest: whole("rest", 0, 600),
+      order: whole("order", 1, 99),
+    };
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) (update as Record<string, unknown>)[key] = value;
+    }
+    if (change.weight !== undefined) {
+      update.weight = change.weight === null ? null : Math.round(number(change.weight, 0, 200) * 1000) / 1000;
+    }
+    if (change.archived !== undefined) update.archived = change.archived === true;
+
+    if (update.repMin !== undefined && update.repMax !== undefined && update.repMax < update.repMin) {
+      throw new InputError("The top of the rep range can't be below the bottom");
+    }
+    if (update.seconds !== undefined && update.maxSeconds !== undefined && update.maxSeconds < update.seconds) {
+      throw new InputError("The longest hold can't be shorter than the target");
+    }
+    return update;
+  });
+}
+
+export function parseNewSlot(input: unknown): NewSlotInput {
+  const raw = record(input, "a JSON object");
+  if (raw.workout !== "A" && raw.workout !== "B") throw new InputError("workout must be A or B");
+  return { workout: raw.workout, exerciseId: strengthExercise(raw.exerciseId) };
 }

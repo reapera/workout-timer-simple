@@ -1,8 +1,8 @@
 "use client";
 
 import { readError, readJson, writeJson, type ApiFailure } from "../client";
-import type { History, SessionLog, TrainingData } from "./types";
-import type { BodyWeightInput, ProgrammeInput, ReviewInput } from "./validate";
+import type { History, SessionLog, Slot, TrainingData } from "./types";
+import type { BodyWeightInput, NewSlotInput, ProgrammeInput, ReviewInput, SlotUpdate } from "./validate";
 import { applySession, applyWorkout, toSessionLog, type WorkoutState } from "./workout";
 
 const DATA_KEY = "wt.training.v1";
@@ -179,4 +179,28 @@ export function logBodyWeight(input: BodyWeightInput): Promise<void> {
 
 export function saveReview(input: ReviewInput): Promise<void> {
   return send("/api/training/review", "POST", input);
+}
+
+/* ------------------------------------------------------------------ *
+ * Editing the workouts (needs a connection)
+ * ------------------------------------------------------------------ */
+
+export function updateSlots(updates: SlotUpdate[]): Promise<void> {
+  return send("/api/training/slots", "PATCH", { updates });
+}
+
+export async function addSlot(input: NewSlotInput): Promise<string> {
+  const response = await fetch("/api/training/slots", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error((await readError(response)).message);
+  return ((await response.json()) as { id: string }).id;
+}
+
+export async function fetchArchivedSlots(): Promise<Slot[]> {
+  const response = await fetch("/api/training/slots", { cache: "no-store" });
+  if (!response.ok) throw new Error((await readError(response)).message);
+  return ((await response.json()) as { archived: Slot[] }).archived;
 }

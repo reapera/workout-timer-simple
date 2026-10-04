@@ -464,3 +464,106 @@ describe("calendar feed", () => {
     expect(await response.text()).toMatch(/No training plan/);
   });
 });
+
+describe("editing the workouts", () => {
+  const slotOf = (data: Awaited<ReturnType<typeof load>>, exerciseId: string) =>
+    data.slots.find((slot) => slot.exerciseId === exerciseId)!;
+
+  it("swaps an exercise, giving a hold its own targets and a fresh weight", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const bird = slotOf(await load(), "bird-dog");
+
+    await training.updateSlots([{ id: bird.id, exerciseId: "farmer-carry" }]);
+    expect(slotOf(await load(), "farmer-carry")).toMatchObject({
+      id: bird.id,
+      workout: "B",
+      order: bird.order,
+      sets: 2,
+      repMin: null,
+      repMax: null,
+      seconds: 20,
+      maxSeconds: 45,
+      rest: 60,
+      weight: null,
+    });
+
+    // Same kind of move: the sets and rest you chose stay.
+    const squat = slotOf(await load(), "goblet-squat");
+    await training.updateSlots([{ id: squat.id, rest: 120 }]);
+    await training.updateSlots([{ id: squat.id, exerciseId: "sumo-squat" }]);
+    expect(slotOf(await load(), "sumo-squat")).toMatchObject({ sets: squat.sets, repMin: 10, repMax: 15, rest: 120, weight: null });
+  });
+
+  it("changes sets, reps, rest and weight, keeping ranges the right way round", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const squat = slotOf(await load(), "goblet-squat");
+
+    await training.updateSlots([{ id: squat.id, sets: 4, repMin: 16, rest: 120, weight: 10 }]);
+    expect(slotOf(await load(), "goblet-squat")).toMatchObject({ sets: 4, repMin: 16, repMax: 16, rest: 120, weight: 10, stretch: 0 });
+  });
+
+  it("removes without deleting, puts back, and never empties a workout", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const data = await load();
+    const workoutA = data.slots.filter((slot) => slot.workout === "A");
+    const deadBug = slotOf(data, "dead-bug");
+
+    await training.updateSlots([{ id: deadBug.id, archived: true }]);
+    expect((await load()).slots.some((slot) => slot.id === deadBug.id)).toBe(false);
+    expect((await training.loadArchivedSlots()).map((slot) => slot.id)).toEqual([deadBug.id]);
+    expect(fake.pagesIn(fake.databaseNamed("Programme Exercises")!.id).length).toBe(data.slots.length);
+
+    // Setup never brings it back.
+    await expect(training.createProgramme(input)).rejects.toThrow(/already exists/);
+    expect((await load()).slots.some((slot) => slot.id === deadBug.id)).toBe(false);
+
+    await training.updateSlots([{ id: deadBug.id, archived: false, order: 9 }]);
+    expect(slotOf(await load(), "dead-bug")).toMatchObject({ id: deadBug.id, order: 9 });
+
+    const everything = workoutA.map((slot) => ({ id: slot.id, archived: true }));
+    await expect(training.updateSlots(everything)).rejects.toThrow(/Workout A needs at least one exercise/);
+  });
+
+  it("adds an exercise at the end of a workout with sensible targets", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const id = await training.addSlot({ workout: "A", exerciseId: "dumbbell-curl" });
+    const added = (await load()).slots.find((slot) => slot.id === id);
+    expect(added).toMatchObject({ exerciseId: "dumbbell-curl", workout: "A", order: 6, sets: 2, repMin: 10, repMax: 15, rest: 60, weight: null });
+  });
+
+  it("makes every exercise a dumbbell one in a single step", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const { dumbbellOnlyChanges, slotUsesDumbbell } = await import("./customize");
+    const before = await load();
+
+    await training.updateSlots(dumbbellOnlyChanges(before.slots, before.programme.equipment));
+    const after = await load();
+    expect(after.slots.map((slot) => slot.exerciseId).sort()).toEqual(
+      [
+        "dumbbell-dead-bug",
+        "farmer-carry",
+        "floor-press",
+        "glute-bridge",
+        "goblet-squat",
+        "one-arm-row",
+        "romanian-deadlift",
+        "shoulder-press",
+        "split-squat",
+        "suitcase-carry",
+      ],
+    );
+    expect(after.slots.every(slotUsesDumbbell)).toBe(true);
+    expect(dumbbellOnlyChanges(after.slots, after.programme.equipment)).toEqual([]);
+  });
+
+  it("refuses rows that aren't in the plan", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    await expect(training.updateSlots([{ id: "00000000-0000-4000-8000-000000000000", sets: 2 }])).rejects.toThrow(/no longer in your plan/);
+  });
+});

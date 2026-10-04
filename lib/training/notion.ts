@@ -20,7 +20,16 @@ import { formatKg, formatValues } from "./format";
 import { decide, workingSets, type Decision, type Outcome } from "./progression";
 import { BACK_CARE } from "./routines";
 import { addDays, DELOAD_DAYS, inDeload } from "./schedule";
-import { buildSlots, canonicalExercise, substitute, type SlotSeed } from "./template";
+import {
+  buildSlots,
+  canonicalExercise,
+  prescriptionFor,
+  seedFor,
+  startingWeight,
+  substitute,
+  targetsFor,
+  type SlotSeed,
+} from "./template";
 import {
   DAYS,
   type BackFeel,
@@ -37,7 +46,14 @@ import {
   type TrainingData,
   type WeightEntry,
 } from "./types";
-import type { BodyWeightInput, ProgrammeInput, ReviewInput } from "./validate";
+import {
+  InputError,
+  type BodyWeightInput,
+  type NewSlotInput,
+  type ProgrammeInput,
+  type ReviewInput,
+  type SlotUpdate,
+} from "./validate";
 
 /**
  * Notion storage for the training programme: three databases that sit next
@@ -589,7 +605,8 @@ function slotProperties(seed: SlotSeed) {
  */
 export async function createProgramme(input: ProgrammeInput): Promise<void> {
   const dbs = await ensureDatabases();
-  const [programmes, slotPages] = await Promise.all([activeProgrammes(dbs), activeSlots(dbs)]);
+  // Removed (archived) rows count too: setup never brings back an exercise taken out on purpose.
+  const [programmes, slotPages] = await Promise.all([activeProgrammes(dbs), queryAll(dbs.exercises, {}) as Promise<Page[]>]);
 
   // Keyed by position, not exercise, so a bench/handle swap never looks "missing".
   const existing = new Set(
@@ -939,4 +956,133 @@ export async function applyReview(input: ReviewInput): Promise<void> {
       },
     });
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Editing the workouts
+ * ------------------------------------------------------------------ */
+
+/** Exercises taken out of a workout, which can be put back. */
+export async function loadArchivedSlots(): Promise<Slot[]> {
+  const dbs = await requireDbs();
+  const pages = (await queryAll(dbs.exercises, {
+    filter: { property: "Archived", checkbox: { equals: true } },
+  })) as Page[];
+  return pages.map(toSlot).filter((slot): slot is Slot => slot !== null);
+}
+
+/** Notion properties for one change to a programme exercise. */
+function slotChanges(slot: Slot | null, update: SlotUpdate): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  let freshStart = false;
+
+  if (update.exerciseId && update.exerciseId !== slot?.exerciseId) {
+    const exercise = getExercise(update.exerciseId);
+    properties.Name = title(exercise.name);
+    properties["Exercise ID"] = text(exercise.id);
+    // Reps and holds don't translate: a different kind of move gets its own sets, targets and rest.
+    if (!slot || getExercise(slot.exerciseId).kind !== exercise.kind) {
+      const prescription = prescriptionFor(exercise);
+      const targets = targetsFor(exercise, prescription);
+      properties.Sets = num(prescription.sets);
+      properties["Rep Min"] = num(targets.repMin);
+      properties["Rep Max"] = num(targets.repMax);
+      properties.Seconds = num(targets.seconds);
+      properties["Max Seconds"] = num(targets.maxSeconds);
+      properties["Rest (s)"] = num(prescription.rest);
+    }
+    if (update.weight === undefined) properties["Weight (kg)"] = num(startingWeight(exercise));
+    freshStart = true;
+  }
+
+  const numbers: Array<[keyof SlotUpdate, string]> = [
+    ["sets", "Sets"],
+    ["repMin", "Rep Min"],
+    ["repMax", "Rep Max"],
+    ["seconds", "Seconds"],
+    ["maxSeconds", "Max Seconds"],
+    ["rest", "Rest (s)"],
+    ["order", "Order"],
+  ];
+  for (const [key, column] of numbers) {
+    const value = update[key];
+    if (typeof value === "number") properties[column] = num(value);
+  }
+  // Keep each range the right way round against what's already stored.
+  if (update.repMin !== undefined && update.repMax === undefined && (slot?.repMax ?? 0) < update.repMin) {
+    properties["Rep Max"] = num(update.repMin);
+  }
+  if (update.repMax !== undefined && update.repMin === undefined && (slot?.repMin ?? 0) > update.repMax) {
+    properties["Rep Min"] = num(update.repMax);
+  }
+  if (update.seconds !== undefined && update.maxSeconds === undefined && (slot?.maxSeconds ?? 0) < update.seconds) {
+    properties["Max Seconds"] = num(update.seconds);
+  }
+  if (update.repMin !== undefined || update.repMax !== undefined || update.seconds !== undefined) freshStart = true;
+
+  if (update.weight !== undefined) {
+    properties["Weight (kg)"] = num(update.weight);
+    freshStart = true;
+  }
+  // A new target or a new movement starts its progress over.
+  if (freshStart) {
+    properties.Stretch = num(0);
+    properties.Stalls = num(0);
+  }
+  if (update.archived !== undefined) properties.Archived = { checkbox: update.archived };
+  return properties;
+}
+
+/**
+ * Applies changes from the workout editor. Rows are only ever edited:
+ * removing an exercise ticks Archived, so it can be put back with its history.
+ */
+export async function updateSlots(updates: SlotUpdate[]): Promise<void> {
+  const dbs = await requireDbs();
+  const pages = (await queryAll(dbs.exercises, {})) as Page[];
+  const byId = new Map(pages.map((page) => [normalizeId(page.id), page]));
+  for (const update of updates) {
+    if (!byId.has(normalizeId(update.id))) throw new InputError("That exercise is no longer in your plan");
+  }
+
+  // Each workout keeps at least one exercise.
+  const archived = new Map(pages.map((page) => [normalizeId(page.id), readCheckbox(page, "Archived")]));
+  for (const update of updates) {
+    if (update.archived !== undefined) archived.set(normalizeId(update.id), update.archived);
+  }
+  for (const workout of ["A", "B"]) {
+    const rows = pages.filter((page) => readSelect(page, "Workout") === workout);
+    const had = rows.some((page) => !readCheckbox(page, "Archived"));
+    const has = rows.some((page) => !archived.get(normalizeId(page.id)));
+    if (had && !has) throw new InputError(`Workout ${workout} needs at least one exercise`);
+  }
+
+  await inBatches(updates, 3, (update) => {
+    const page = byId.get(normalizeId(update.id))!;
+    return notion(`/pages/${page.id}`, {
+      method: "PATCH",
+      body: { properties: slotChanges(toSlot(page), update) },
+    });
+  });
+}
+
+/** Adds an exercise to the end of a workout, with sensible starting targets. */
+export async function addSlot(input: NewSlotInput): Promise<string> {
+  const dbs = await requireDbs();
+  const [programmes, slotPages] = await Promise.all([activeProgrammes(dbs), activeSlots(dbs)]);
+  if (!programmes.length) throw new TrainingSetupError("programme");
+  const orders = slotPages
+    .map(toSlot)
+    .filter((slot): slot is Slot => slot !== null && slot.workout === input.workout)
+    .map((slot) => slot.order);
+  const order = Math.floor(Math.max(0, ...orders)) + 1;
+
+  const page = await notion<{ id: string }>("/pages", {
+    method: "POST",
+    body: {
+      parent: { database_id: dbs.exercises },
+      properties: slotProperties(seedFor(input.exerciseId, input.workout, order)),
+    },
+  });
+  return page.id;
 }

@@ -243,3 +243,37 @@ describe("deload weeks", () => {
     expect(decision).toMatchObject({ outcome: "set", next: { weight: 6 } });
   });
 });
+
+describe("holds with a dumbbell (carries)", () => {
+  const carry = getExercise("farmer-carry");
+  const carryLadder = ladderFor(carry, DEFAULT_EQUIPMENT);
+  const hold = (overrides: Partial<Slot> = {}) =>
+    slot({ exerciseId: "farmer-carry", weight: 8, repMin: null, repMax: null, sets: 2, seconds: 30, maxSeconds: 45, ...overrides });
+
+  it("sets the weight carried the first time", () => {
+    const decision = decide(hold({ weight: null }), carry, log([30, 28], 7, { plannedSets: 2 }), carryLadder);
+    expect(decision).toMatchObject({ outcome: "set", next: { weight: 7, seconds: 30 } });
+  });
+
+  it("adds time first, at the same weight", () => {
+    const decision = decide(hold(), carry, log([30, 30], 8, { plannedSets: 2 }), carryLadder);
+    expect(decision).toMatchObject({ outcome: "up", next: { weight: 8, seconds: 35 } });
+  });
+
+  it("moves to the next dumbbell at the top time, starting again from about half", () => {
+    const decision = decide(hold({ seconds: 45 }), carry, log([45, 45], 8, { plannedSets: 2 }), carryLadder);
+    expect(decision).toMatchObject({ outcome: "up", next: { weight: 8.5, seconds: 20 } });
+    expect(decision.message).toBe("Next time: 8.5 kg ↑ for 20 s");
+  });
+
+  it("goes lighter on back pain and holds on discomfort", () => {
+    expect(decide(hold(), carry, log([30, 30], 8, { plannedSets: 2, back: "pain" }), carryLadder).next.weight).toBe(7);
+    const mild = decide(hold({ seconds: 45 }), carry, log([45, 45], 8, { plannedSets: 2, back: "mild" }), carryLadder);
+    expect(mild).toMatchObject({ outcome: "hold", next: { weight: 8, seconds: 45 } });
+  });
+
+  it("still finds a first weight in a lighter week", () => {
+    const decision = decide(hold({ weight: null }), carry, log([30, 30], 7, { plannedSets: 2 }), carryLadder, { deload: true });
+    expect(decision).toMatchObject({ outcome: "set", next: { weight: 7 } });
+  });
+});

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="Dumbbell dead bug, reach: one leg straightened towards the floor while the dumbbell and lower back stay still">
+  <rect width="600" height="400" fill="#1b1e29"/>
+  <rect x="30" y="356" width="540" height="8" rx="4" fill="#38a8f5" opacity="0.35"/>
+  <line x1="30" y1="364" x2="570" y2="364" stroke="#2a2f3f" stroke-width="4"/>
+  <g fill="none" stroke="#e8ebf3" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="330,334 330,238 418,238" stroke-width="16" opacity="0.45"/>
+    <line x1="332" y1="336" x2="532" y2="318" stroke-width="16"/>
+    <line x1="170" y1="336" x2="330" y2="336" stroke-width="28"/>
+    <line x1="186" y1="328" x2="186" y2="212" stroke-width="14"/>
+  </g>
+  <circle cx="140" cy="330" r="23" fill="#e8ebf3"/>
+  <rect x="168" y="176" width="36" height="34" rx="6" fill="#f5a524"/>
+  <line x1="176" y1="214" x2="196" y2="214" stroke="#c7cdd9" stroke-width="8" stroke-linecap="round"/>
+</svg>

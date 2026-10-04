@@ -11,10 +11,14 @@ works out next session's weights. Everything is stored in your Notion **Health T
 and suggests changes, such as a lighter week or a harder exercise. Reminders go to your phone's
 calendar, and the app installs to your home screen and opens without signal.
 
+Everything about the workouts can be changed under **Edit workouts**: swap, add, remove and
+reorder exercises, set sets, reps, rest and weights, or make it dumbbell-only in one tap.
+
 ## The programme
 
 Built for a beginner training at home with adjustable dumbbells, aiming at general fitness, with a
-lower back that needs care.
+lower back that needs care. This is the starting plan; change any of it under
+[Edit workouts](#make-it-yours).
 
 | Day | What |
 | --- | --- |
@@ -54,6 +58,8 @@ Double progression: earn the reps, then the weight.
 6. **Big jumps:** if the next dumbbell is more than 20% heavier (e.g. 2 kg → 4.5 kg), you first
    earn extra reps (+3, then +6) before moving up.
 7. **Timed holds** add 5 s once every set is held, up to their ceiling.
+   **Carries** (holds with a dumbbell) do the same, then move to the next dumbbell up and start
+   again from about half the time.
 8. **Back check:** after each exercise you say how your lower back felt. Mild discomfort holds
    the weight; pain drops it a step straight away.
 
@@ -62,6 +68,40 @@ the summary screen shows exactly what Notion will record.
 
 Before the first set of each exercise, the workout shows what you did last time and any note you
 left yourself, e.g. *"Hamstrings, not back. Keep the dumbbells close."*
+
+## Make it yours
+
+**Edit workouts** is on each workout card on Today, at the bottom of Today, and in Plan
+settings. For Workout A and B you can:
+
+- **Swap** an exercise: similar moves are offered first (squats for a squat, and so on). The new
+  one finds its weight in its first session. Swapping between a counted move and a hold (e.g. a
+  plank for a carry) also brings that exercise's own sets, targets and rest.
+- **Add** an exercise from the library, grouped by what it trains. A **Dumbbell exercises only**
+  filter is on by default.
+- **Remove** an exercise. It's only marked removed (`Archived` in Notion), with its history kept,
+  and **Put back** returns it. A workout always keeps at least one exercise.
+- **Reorder** with the arrows.
+- **Change** sets, the rep range (or hold times), rest, and the weight. Weights step through
+  what your dumbbells can actually make. **Find it** lets the next session work the weight out
+  again.
+
+**Dumbbell only** swaps the bodyweight moves in one tap:
+
+| From | To | Why |
+| --- | --- | --- |
+| Dead bug | Dumbbell dead bug | Same job: keeping your spine still while your legs move |
+| Bird dog | Farmer carry | Bracing against a load, standing tall |
+| Side plank | Suitcase carry | A side plank you can load: resisting being pulled sideways |
+| Glute bridge, split squat | Same moves, with a dumbbell from the start | |
+
+The core moves stay in, loaded, because they're the ones that protect your back. With one handle,
+the farmer carry becomes a suitcase carry. Back care days are separate bodyweight stretching:
+turn them off in Plan settings by unselecting the days.
+
+The library now also has sumo squats, reverse lunges, step-ups, floor flies, lateral raises,
+seated reverse flies, biceps and hammer curls, lying triceps extensions, calf raises, farmer and
+suitcase carries, and the dumbbell dead bug, each with pictures and form cues.
 
 ## Progress
 
@@ -169,8 +209,8 @@ three are added to an existing database automatically the first time they're nee
 `Rest (s)`, `Weight (kg)`, `Stretch`, `Stalls`, `Last Session`, `Last Done`, `Archived`.
 
 - `Weight (kg)` is per dumbbell. Empty means "find it next session" and 0 means bodyweight.
-- You can edit weights, rep ranges or rest here and the app follows.
-- Tick `Archived` to drop an exercise without deleting it.
+- **Edit workouts** changes these rows for you. Editing them here works too; the app follows.
+- `Archived` marks an exercise removed without deleting it (that's what **Remove** does).
 
 **Lift Log**: one row per exercise per workout. `Date`, `Workout`, `Exercise ID`,
 `Weight (kg)`, `Sets`, `Reps` (e.g. `12, 11, 10` or `20 s, 18 s`), `Total Reps`,
@@ -295,7 +335,8 @@ npm run typecheck
 The tests cover:
 
 - the plate maths
-- every progression rule, including lighter weeks
+- every progression rule, including lighter weeks and carries
+- editing the workouts: swaps, targets, remove and put back, adding, dumbbell-only
 - the schedule and rotation
 - the workout state machine
 - progress read-outs and the 4-week review
@@ -334,8 +375,8 @@ phone keeps working copies:
   itself on the phone. Pages you've opened before open with no signal. Pages you haven't say
   so and link back to Today.
 
-Editing routines and plan settings, saving body weight and applying a review still require a
-connection.
+Editing routines, workouts and plan settings, saving body weight and applying a review still
+require a connection.
 
 ## Layout
 
@@ -345,6 +386,7 @@ connection.
 | `app/workout/` | The workout in progress |
 | `app/progress/` | Charts, the consistency calendar and body weight |
 | `app/review/` | The 4-week review |
+| `app/workouts/` | Edit workouts: swap, add, remove, reorder, targets, dumbbell-only |
 | `app/setup/` | First-time setup, plan settings and reminders |
 | `app/exercises/` | Exercise guides: photos, steps, mistakes, back advice, demo video link |
 | `app/timer/`, `app/routines/` | The spoken interval timer and its routines |
@@ -352,7 +394,7 @@ connection.
 | `app/api/calendar/` | The calendar feed and its link |
 | `app/manifest.ts`, `public/sw.js`, `public/icons/` | Install to home screen and offline start-up |
 | `proxy.ts`, `app/unlock/` | Optional passcode lock |
-| `lib/training/` | Exercise library, plate maths, progression, schedule, workout state, progress, reviews, calendar feed, Notion storage |
+| `lib/training/` | Exercise library, plate maths, progression, schedule, workout state, editing, progress, reviews, calendar feed, Notion storage |
 | `lib/useTimer.ts` | Interval engine |
 | `lib/notion.ts` | Notion REST client and timer routines |
 | `lib/audio.ts` | Speech and beeps |
@@ -364,7 +406,8 @@ connection.
 - Exercise photos come from [free-exercise-db](https://github.com/yuhonas/free-exercise-db),
   released into the public domain (Unlicense). The dataset doesn't say where the photos were
   originally taken, which is fine for a personal app. Replace them if you ever publish it.
-- The goblet squat and bird dog drawings were made for this app.
+- The goblet squat, bird dog, farmer and suitcase carry, and dumbbell dead bug drawings were
+  made for this app.
 - This is a training aid, not medical advice. Stop any exercise that causes sharp pain. Back
   pain that spreads down a leg, comes with numbness or weakness, or keeps getting worse needs a
   doctor or physiotherapist.
