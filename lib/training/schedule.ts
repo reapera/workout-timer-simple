@@ -1,4 +1,4 @@
-import { DAYS, type DayName, type Programme, type SessionMark, type WorkoutKey } from "./types";
+import { DAYS, WORKOUT_KEYS, type DayName, type Programme, type SessionMark, type WorkoutKey } from "./types";
 
 /**
  * The fixed weekly schedule: strength on training days (alternating Workout A
@@ -113,21 +113,39 @@ function byTime(a: SessionMark, b: SessionMark): number {
   return (a.at ?? "") < (b.at ?? "") ? -1 : (a.at ?? "") > (b.at ?? "") ? 1 : 0;
 }
 
-export function other(workout: WorkoutKey): WorkoutKey {
-  return workout === "A" ? "B" : "A";
+/** The workout after `workout`; a workout no longer in the plan restarts it. */
+export function nextInRotation(rotation: readonly WorkoutKey[], workout: WorkoutKey | undefined): WorkoutKey {
+  const index = workout ? rotation.indexOf(workout) : -1;
+  return index === -1 ? (rotation[0] ?? "A") : rotation[(index + 1) % rotation.length];
 }
 
-/** A after B after A… starting with A. */
-export function nextWorkoutKey(history: SessionMark[]): WorkoutKey {
-  const strength = history.filter((mark) => mark.kind === "strength" && mark.workout).sort(byTime);
-  const last = strength[strength.length - 1];
-  return last?.workout ? other(last.workout) : "A";
+/** The workouts that have exercises, in rotation order. */
+export function rotationFor(slots: ReadonlyArray<{ workout: WorkoutKey }>): WorkoutKey[] {
+  const keys = WORKOUT_KEYS.filter((key) => slots.some((slot) => slot.workout === key));
+  return keys.length ? keys : ["A"];
+}
+
+/**
+ * The next workout: the one after the last done, in rotation (A, B, A… or
+ * A, B, C, A…). A newly switched-in plan starts from its first workout.
+ */
+export function nextWorkoutKey(
+  history: SessionMark[],
+  rotation: readonly WorkoutKey[] = ["A", "B"],
+  planSince: string | null = null,
+): WorkoutKey {
+  const strength = history
+    .filter((mark) => mark.kind === "strength" && mark.workout)
+    .filter((mark) => !planSince || (mark.at ?? `${mark.date}T23:59:59.999Z`) >= planSince)
+    .sort(byTime);
+  return nextInRotation(rotation, strength[strength.length - 1]?.workout);
 }
 
 export function buildToday(
-  programme: Pick<Programme, "trainingDays" | "backCareDays" | "startDate">,
+  programme: Pick<Programme, "trainingDays" | "backCareDays" | "startDate"> & { planSince?: string | null },
   history: SessionMark[],
   today: string,
+  rotation: readonly WorkoutKey[] = ["A", "B"],
 ): TodayPlan {
   const plan = planFor(programme, today);
   const on = (date: string, kind: SessionMark["kind"]) =>
@@ -137,7 +155,7 @@ export function buildToday(
   const doneStrength = todayStrength.length > 0;
   const doneBackCare = on(today, "backcare").length > 0;
   const doneWorkout = todayStrength[todayStrength.length - 1]?.workout ?? null;
-  const upNext = nextWorkoutKey(history);
+  const upNext = nextWorkoutKey(history, rotation, programme.planSince ?? null);
 
   // A strength day in the last three days, after the start, with nothing done since.
   let catchUp: TodayPlan["catchUp"] = null;
@@ -191,7 +209,7 @@ export function buildToday(
       workout = strength[strength.length - 1].workout;
     } else if (dayPlan === "strength" && date >= today) {
       workout = projected;
-      projected = other(projected);
+      projected = nextInRotation(rotation, projected);
     }
 
     return { date, day, plan: dayPlan, status, workout };

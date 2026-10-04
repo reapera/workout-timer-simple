@@ -171,7 +171,7 @@ function WorkoutHeader({ state, onEnd }: { state: WorkoutState; onEnd: () => voi
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-white/60">
-            Workout {state.workout}
+            {state.title ?? `Workout ${state.workout}`}
             {state.deload && <span className="text-[var(--color-rest)]"> · Lighter week</span>}
           </p>
           <p className="text-xs text-white/35">
@@ -906,7 +906,7 @@ function FinishView({
       <p className="text-sm font-medium tracking-[0.2em] text-[var(--color-work)] uppercase">
         {completed === state.exercises.length ? "Complete" : "Ended early"}
       </p>
-      <h1 className="mt-2 text-3xl font-semibold text-white">Workout {state.workout}</h1>
+      <h1 className="mt-2 text-3xl font-semibold text-white">{state.title ?? `Workout ${state.workout}`}</h1>
 
       <div className="mt-6 grid grid-cols-3 gap-3">
         <Stat label="Minutes" value={String(sums.minutes)} />

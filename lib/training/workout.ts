@@ -2,7 +2,7 @@ import { ladderFor, snapDown, snapNearest, stepDown } from "./equipment";
 import { getExercise } from "./exercises";
 import { BACK_OFF, decide, MAX_DELOAD_DROP, workingSets, type Decision } from "./progression";
 import { inDeload } from "./schedule";
-import { setsForWeek, slotsFor } from "./template";
+import { setsForWeek, slotsFor, workoutTitle } from "./template";
 import type {
   BackFeel,
   Effort,
@@ -57,6 +57,8 @@ export type WorkoutState = {
   finishedAt: number | null;
   backCheck: boolean;
   equipment: Equipment;
+  /** "Upper body", or "Workout A"; older saved workouts may not have it. */
+  title?: string;
   /** A lighter week: one set fewer, ~10% less weight, and no progression. */
   deload?: boolean;
   phase: Phase;
@@ -149,6 +151,7 @@ export function createWorkout(options: {
     finishedAt: null,
     backCheck: data.programme.backPain,
     equipment: data.programme.equipment,
+    title: workoutTitle(data.programme, workout),
     deload,
     phase: exercises.length ? "warmup" : "done",
     index: 0,

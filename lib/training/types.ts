@@ -2,7 +2,14 @@ export type DayName = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 
 export const DAYS: readonly DayName[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export type WorkoutKey = "A" | "B";
+/** Workouts rotate in letter order: A, B, then C and D for plans with more days. */
+export type WorkoutKey = "A" | "B" | "C" | "D";
+
+export const WORKOUT_KEYS: readonly WorkoutKey[] = ["A", "B", "C", "D"];
+
+export function isWorkoutKey(value: unknown): value is WorkoutKey {
+  return typeof value === "string" && (WORKOUT_KEYS as readonly string[]).includes(value);
+}
 
 export type PlateStock = {
   /** kg per plate. */
@@ -42,6 +49,10 @@ export type Programme = {
   lastReview: number;
   /** "HH:MM" for calendar reminders; null = the default time. */
   reminderTime: string | null;
+  /** Names for the workouts, e.g. { A: "Upper body" }; unnamed ones show as "Workout A". */
+  workoutNames: Partial<Record<WorkoutKey, string>>;
+  /** When the current plan was switched in (ISO); the rotation starts again from its first workout. */
+  planSince: string | null;
 };
 
 /** One row of the Programme Exercises database: an exercise and where it stands. */

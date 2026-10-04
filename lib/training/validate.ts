@@ -1,6 +1,18 @@
 import { DEFAULT_EQUIPMENT } from "./equipment";
 import { EXERCISES } from "./exercises";
-import { DAYS, type BackFeel, type DayName, type Effort, type Equipment, type ExerciseLog, type Level, type SessionLog, type WorkoutKey } from "./types";
+import {
+  DAYS,
+  isWorkoutKey,
+  WORKOUT_KEYS,
+  type BackFeel,
+  type DayName,
+  type Effort,
+  type Equipment,
+  type ExerciseLog,
+  type Level,
+  type SessionLog,
+  type WorkoutKey,
+} from "./types";
 
 /**
  * Guards for what the browser sends. Anything malformed is rejected before it
@@ -128,7 +140,7 @@ export function parseSessionLog(input: unknown): SessionLog {
   if (typeof raw.id !== "string" || !/^[\w-]{8,64}$/.test(raw.id)) {
     throw new InputError("A session needs an id");
   }
-  if (raw.workout !== "A" && raw.workout !== "B") throw new InputError("workout must be A or B");
+  if (!isWorkoutKey(raw.workout)) throw new InputError("workout must be A, B, C or D");
   if (typeof raw.date !== "string" || !ISO_DATE.test(raw.date)) {
     throw new InputError("date must be YYYY-MM-DD");
   }
@@ -268,6 +280,64 @@ export function parseSlotUpdates(input: unknown): SlotUpdate[] {
 
 export function parseNewSlot(input: unknown): NewSlotInput {
   const raw = record(input, "a JSON object");
-  if (raw.workout !== "A" && raw.workout !== "B") throw new InputError("workout must be A or B");
+  if (!isWorkoutKey(raw.workout)) throw new InputError("workout must be A, B, C or D");
   return { workout: raw.workout, exerciseId: strengthExercise(raw.exerciseId) };
+}
+
+/* ------------------------------------------------------------------ *
+ * Plans
+ * ------------------------------------------------------------------ */
+
+export type ApplyPlanInput = {
+  /** A ready-made plan's id, or the Notion row id of a saved plan. */
+  plan: { kind: "builtin" | "saved"; id: string };
+  /** New training and back care days, if they should change too. */
+  days?: { trainingDays: DayName[]; backCareDays: DayName[] };
+  /** Save the current workouts under this name first, to switch back later. */
+  saveCurrentAs?: string;
+};
+
+function planName(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) throw new InputError("Give the plan a name");
+  return value.trim().slice(0, 60);
+}
+
+export function parseApplyPlan(input: unknown): ApplyPlanInput {
+  const raw = record(input, "a JSON object");
+  const plan = record(raw.plan, "a plan");
+  if (plan.kind !== "builtin" && plan.kind !== "saved") throw new InputError("Unknown kind of plan");
+  if (typeof plan.id !== "string" || !ROW_ID.test(plan.id)) throw new InputError("Unknown plan");
+
+  const result: ApplyPlanInput = { plan: { kind: plan.kind, id: plan.id } };
+  if (raw.days !== undefined && raw.days !== null) {
+    const value = record(raw.days, "days");
+    const trainingDays = days(value.trainingDays);
+    if (!trainingDays.length) throw new InputError("Pick at least one training day");
+    result.days = { trainingDays, backCareDays: days(value.backCareDays).filter((day) => !trainingDays.includes(day)) };
+  }
+  if (raw.saveCurrentAs !== undefined && raw.saveCurrentAs !== null) result.saveCurrentAs = planName(raw.saveCurrentAs);
+  return result;
+}
+
+export function parseSavePlan(input: unknown): { name: string } {
+  return { name: planName(record(input, "a JSON object").name) };
+}
+
+export function parsePlanId(input: unknown): { id: string } {
+  const raw = record(input, "a JSON object");
+  if (typeof raw.id !== "string" || !ROW_ID.test(raw.id)) throw new InputError("Unknown plan");
+  return { id: raw.id };
+}
+
+/** Workout names to set; an empty name goes back to "Workout A". */
+export function parseWorkoutNamesInput(input: unknown): Partial<Record<WorkoutKey, string>> {
+  const raw = record(record(input, "a JSON object").names, "names");
+  const names: Partial<Record<WorkoutKey, string>> = {};
+  for (const key of WORKOUT_KEYS) {
+    const value = raw[key];
+    if (value === undefined) continue;
+    if (typeof value !== "string") throw new InputError("A workout name must be text");
+    names[key] = value.replace(/[;\n]/g, " ").trim().slice(0, 40);
+  }
+  return names;
 }

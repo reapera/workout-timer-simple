@@ -22,8 +22,8 @@ import { getExercise, type ExerciseDef } from "@/lib/training/exercises";
 import { formatPlates, formatTarget } from "@/lib/training/format";
 import { BACK_CARE, BACK_CARE_ROUTINE } from "@/lib/training/routines";
 import { reviewDue } from "@/lib/training/review";
-import { buildToday, inDeload, localDate } from "@/lib/training/schedule";
-import { estimateMinutes, slotsFor, workoutName } from "@/lib/training/template";
+import { buildToday, inDeload, localDate, rotationFor } from "@/lib/training/schedule";
+import { estimateMinutes, slotsFor, workoutInitials, workoutName, workoutTitle } from "@/lib/training/template";
 import type { Equipment, Slot, TrainingData, WorkoutKey } from "@/lib/training/types";
 import { createWorkout, plannedLoad, type WorkoutState } from "@/lib/training/workout";
 
@@ -165,8 +165,10 @@ function Plan({
   onStartWorkout: (workout: WorkoutKey, week: number) => void;
   onStartBackCare: () => void;
 }) {
-  const plan = buildToday(data.programme, data.history, today);
+  const rotation = rotationFor(data.slots);
+  const plan = buildToday(data.programme, data.history, today, rotation);
   const { programme } = data;
+  const title = (workout: WorkoutKey) => workoutTitle(programme, workout);
   const deload = inDeload(programme, today);
   const reviewBlock = reviewDue(programme, today);
   const dayLabel =
@@ -225,7 +227,7 @@ function Plan({
           >
             <span>
               <span className="block text-sm font-semibold text-[var(--color-work)]">
-                Workout {resumable.workout} in progress
+                {title(resumable.workout)} in progress
               </span>
               <span className="block text-xs text-white/50">
                 Exercise {Math.min(resumable.index + 1, resumable.exercises.length)} of {resumable.exercises.length}
@@ -239,7 +241,7 @@ function Plan({
       <div className="mt-4 space-y-4">
         {plan.plan === "strength" &&
           (plan.doneStrength ? (
-            <DoneCard title={`Workout ${plan.doneWorkout ?? plan.workout} done`} next={plan.next} />
+            <DoneCard title={`${title(plan.doneWorkout ?? plan.workout)} done`} next={plan.next} nextTitle={plan.next ? title(plan.next.workout) : null} />
           ) : (
             workoutCard(plan.workout, "Today", resumable?.workout === plan.workout ? "Resume workout" : "Start workout")
           ))}
@@ -250,21 +252,21 @@ function Plan({
               You missed {fullDay(plan.catchUp.day)}&apos;s workout
             </p>
             <p className="mt-1 text-sm text-white/60">
-              Nothing is skipped — Workout {plan.workout} is next whenever you do it. Do it today, or
+              Nothing is skipped — {title(plan.workout)} is next whenever you do it. Do it today, or
               {plan.next ? ` on ${fullDay(plan.next.day)}` : " next time"}.
             </p>
             <button
               onClick={() => onStartWorkout(plan.workout, plan.week)}
               className="mt-3 w-full rounded-xl bg-[var(--color-prep)] py-3 font-semibold text-[var(--color-ink)] transition active:scale-95"
             >
-              Do Workout {plan.workout} today
+              Do {title(plan.workout)} today
             </button>
           </section>
         )}
 
         {plan.plan === "backcare" &&
           (plan.doneBackCare ? (
-            <DoneCard title="Back care done" next={plan.next} />
+            <DoneCard title="Back care done" next={plan.next} nextTitle={plan.next ? title(plan.next.workout) : null} />
           ) : (
             <BackCareCard onGuide={onGuide} onStart={onStartBackCare} heading="Today" />
           ))}
@@ -297,7 +299,11 @@ function Plan({
 
       <section className="mt-6">
         <p className="mb-3 text-xs tracking-[0.15em] text-white/35 uppercase">This week</p>
-        <WeekStrip strip={plan.strip} />
+        <WeekStrip
+          strip={plan.strip}
+          initials={workoutInitials(programme, rotation)}
+          titles={Object.fromEntries(rotation.map((key) => [key, title(key)]))}
+        />
       </section>
 
       {programme.backPain && (
@@ -313,6 +319,9 @@ function Plan({
         </Link>
         <Link href="/workouts" className="transition hover:text-white">
           Edit workouts
+        </Link>
+        <Link href="/plans" className="transition hover:text-white">
+          Plans
         </Link>
         <Link href="/exercises" className="transition hover:text-white">
           Exercise guides
@@ -366,9 +375,11 @@ function WorkoutCard({
           Edit
         </Link>
       </div>
-      <h2 className="mt-1 text-2xl font-semibold text-white">Workout {workout}</h2>
+      <h2 className="mt-1 text-2xl font-semibold text-white">{workoutTitle(data.programme, workout)}</h2>
       <p className="text-sm text-white/45">
-        {workoutName(slots)} · about {minutes} min
+        {/* "Squat · Press · Row" — unless the name already says it ("Core"). */}
+        {workoutName(slots).toLowerCase() === workoutTitle(data.programme, workout).toLowerCase() ? "" : `${workoutName(slots)} · `}
+        about {minutes} min
       </p>
 
       <ul className="mt-3 divide-y divide-[var(--color-line)]">
@@ -489,9 +500,12 @@ function BackCareCard({
 function DoneCard({
   title,
   next,
+  nextTitle,
 }: {
   title: string;
   next: { day: string; workout: WorkoutKey } | null;
+  /** "Upper body", or "Workout A". */
+  nextTitle: string | null;
 }) {
   return (
     <section className="rounded-3xl border border-[var(--color-work)]/30 bg-[var(--color-work)]/10 p-5 text-center">
@@ -500,7 +514,7 @@ function DoneCard({
       </p>
       <h2 className="mt-1 text-xl font-semibold text-white">{title}</h2>
       <p className="mt-1 text-sm text-white/55">
-        Nice work.{next ? ` Next strength session: ${fullDay(next.day)}, Workout ${next.workout}.` : ""}
+        Nice work.{next ? ` Next strength session: ${fullDay(next.day)}, ${nextTitle ?? `Workout ${next.workout}`}.` : ""}
       </p>
     </section>
   );

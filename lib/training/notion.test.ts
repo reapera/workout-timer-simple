@@ -504,7 +504,7 @@ describe("editing the workouts", () => {
     expect(slotOf(await load(), "goblet-squat")).toMatchObject({ sets: 4, repMin: 16, repMax: 16, rest: 120, weight: 10, stretch: 0 });
   });
 
-  it("removes without deleting, puts back, and never empties a workout", async () => {
+  it("removes without deleting, puts back, and never empties the plan", async () => {
     await freshFake();
     await training.createProgramme(input);
     const data = await load();
@@ -523,8 +523,11 @@ describe("editing the workouts", () => {
     await training.updateSlots([{ id: deadBug.id, archived: false, order: 9 }]);
     expect(slotOf(await load(), "dead-bug")).toMatchObject({ id: deadBug.id, order: 9 });
 
-    const everything = workoutA.map((slot) => ({ id: slot.id, archived: true }));
-    await expect(training.updateSlots(everything)).rejects.toThrow(/Workout A needs at least one exercise/);
+    // A whole workout can go (it drops out of the rotation), but not every exercise in the plan.
+    const everything = (await load()).slots.map((slot) => ({ id: slot.id, archived: true }));
+    await expect(training.updateSlots(everything)).rejects.toThrow(/plan needs at least one exercise/);
+    await training.updateSlots(workoutA.map((slot) => ({ id: slot.id, archived: true })));
+    expect(new Set((await load()).slots.map((slot) => slot.workout))).toEqual(new Set(["B"]));
   });
 
   it("adds an exercise at the end of a workout with sensible targets", async () => {
@@ -565,5 +568,102 @@ describe("editing the workouts", () => {
     await freshFake();
     await training.createProgramme(input);
     await expect(training.updateSlots([{ id: "00000000-0000-4000-8000-000000000000", sets: 2 }])).rejects.toThrow(/no longer in your plan/);
+  });
+});
+
+describe("plans", () => {
+  const SIX_DAYS: ProgrammeInput["trainingDays"] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const layout = (slots: Array<{ workout: string; order: number; exerciseId: string }>) =>
+    slots.map((slot) => `${slot.workout}${slot.order}:${slot.exerciseId}`).sort();
+
+  it("switches to Upper / Legs / Core, keeping known weights and restarting the rotation", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const before = await load();
+    const squat = before.slots.find((slot) => slot.exerciseId === "goblet-squat")!;
+    await training.updateSlots([{ id: squat.id, weight: 9 }]);
+
+    await training.applyPlan({
+      plan: { kind: "builtin", id: "upper-legs-core" },
+      days: { trainingDays: SIX_DAYS, backCareDays: [] },
+    });
+    const after = await load();
+    expect(after.programme).toMatchObject({
+      name: "Upper / Legs / Core",
+      workoutNames: { A: "Upper body", B: "Legs", C: "Core" },
+      trainingDays: SIX_DAYS,
+      backCareDays: [],
+    });
+    expect(after.programme.planSince).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(new Set(after.slots.map((slot) => slot.workout))).toEqual(new Set(["A", "B", "C"]));
+    expect(after.slots.find((slot) => slot.exerciseId === "goblet-squat")).toMatchObject({ workout: "B", weight: 9 });
+    expect(after.slots.find((slot) => slot.exerciseId === "dumbbell-curl")?.weight).toBeNull();
+    // The old exercises are archived with their history, not deleted.
+    expect((await training.loadArchivedSlots()).map((slot) => slot.id).sort()).toEqual(before.slots.map((slot) => slot.id).sort());
+  });
+
+  it("saves the current workouts as a plan and switches back to them", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const original = await load();
+    const deadBug = original.slots.find((slot) => slot.exerciseId === "dead-bug")!;
+    await training.updateSlots([{ id: deadBug.id, sets: 3 }]);
+    expect(await training.loadSavedPlans()).toEqual([]);
+
+    await training.applyPlan({ plan: { kind: "builtin", id: "upper-lower" }, saveCurrentAs: "My full body" });
+    expect(fake.databaseNamed("Saved Plans")).toBeTruthy();
+    const saved = await training.loadSavedPlans();
+    expect(saved.map((plan) => plan.name)).toEqual(["My full body"]);
+    expect((await load()).programme.workoutNames).toEqual({ A: "Upper body", B: "Lower body" });
+
+    await training.applyPlan({ plan: { kind: "saved", id: saved[0].id } });
+    const back = await load();
+    expect(back.programme).toMatchObject({ name: "My full body", workoutNames: {} });
+    expect(layout(back.slots)).toEqual(layout(original.slots));
+    expect(back.slots.find((slot) => slot.exerciseId === "dead-bug")?.sets).toBe(3);
+
+    await training.removeSavedPlan(saved[0].id);
+    expect(await training.loadSavedPlans()).toEqual([]);
+    // Only saved plans can be removed this way.
+    await expect(training.removeSavedPlan(back.slots[0].id)).rejects.toThrow(/doesn't exist/);
+  });
+
+  it("names and renames workouts", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    await training.renameWorkouts({ A: "Push", B: "Pull" });
+    expect((await load()).programme.workoutNames).toEqual({ A: "Push", B: "Pull" });
+    await training.renameWorkouts({ B: "" });
+    expect((await load()).programme.workoutNames).toEqual({ A: "Push" });
+  });
+
+  it("records a third workout like any other", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    await training.applyPlan({ plan: { kind: "builtin", id: "upper-legs-core" } });
+    const data = await load();
+    const carry = data.slots.find((slot) => slot.exerciseId === "suitcase-carry")!;
+    await training.recordSession({
+      id: "session-core-0001",
+      workout: "C",
+      date: "2026-09-30",
+      startedAt: "2026-09-30T07:00:00.000Z",
+      elapsedSeconds: 900,
+      exercises: [
+        { slotId: carry.id, exerciseId: "suitcase-carry", plannedSets: 2, sets: [{ weight: 8, value: 20 }, { weight: 8, value: 20 }], effort: "good", back: "none" },
+      ],
+    });
+    const lift = fake.pagesIn(fake.databaseNamed("Lift Log")!.id).find((page) => props(page, "Exercise ID") === "suitcase-carry")!;
+    expect(props(lift, "Workout")).toBe("C");
+    const history = (await load()).history.filter((mark) => mark.kind === "strength");
+    expect(history.map((mark) => mark.workout)).toEqual(["C"]);
+    expect((await training.loadHistory()).lifts.map((entry) => entry.workout)).toEqual(["C"]);
+  });
+
+  it("refuses unknown plans and plans that don't fit the equipment", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    await expect(training.applyPlan({ plan: { kind: "builtin", id: "nope" } })).rejects.toThrow(/Unknown plan/);
+    await expect(training.applyPlan({ plan: { kind: "saved", id: "00000000-0000-4000-8000-000000000000" } })).rejects.toThrow(/no longer exists/);
   });
 });

@@ -5,12 +5,14 @@ import {
   buildToday,
   dayOf,
   daysBetween,
+  nextInRotation,
   nextWorkoutKey,
   planFor,
+  rotationFor,
   weekNumber,
   weekStart,
 } from "./schedule";
-import type { SessionMark } from "./types";
+import type { DayName, SessionMark } from "./types";
 
 const programme = {
   trainingDays: ["Mon", "Wed", "Fri"] as const,
@@ -26,7 +28,7 @@ const WED = "2026-09-30";
 const THU = "2026-10-01";
 const FRI = "2026-10-02";
 
-const strength = (date: string, workout: "A" | "B", at?: string): SessionMark => ({
+const strength = (date: string, workout: "A" | "B" | "C", at?: string): SessionMark => ({
   date,
   kind: "strength",
   workout,
@@ -135,5 +137,38 @@ describe("buildToday", () => {
     const today = buildToday(days, [strength(MON, "A")], "2026-10-04");
     expect(today.catchUp).toEqual({ date: FRI, day: "Fri" });
     expect(buildToday(days, [strength(MON, "A")], "2026-10-04").next?.date).toBe("2026-10-05");
+  });
+});
+
+describe("plans with more workouts", () => {
+  const split = ["A", "B", "C"] as const;
+
+  it("rotates through every workout that has exercises", () => {
+    expect(rotationFor([{ workout: "C" }, { workout: "A" }, { workout: "B" }, { workout: "A" }])).toEqual(["A", "B", "C"]);
+    expect(rotationFor([{ workout: "B" }])).toEqual(["B"]);
+    expect(rotationFor([])).toEqual(["A"]);
+    expect(nextInRotation(split, "B")).toBe("C");
+    expect(nextInRotation(split, "C")).toBe("A");
+    // A workout that's no longer in the plan starts it again.
+    expect(nextInRotation(["A", "B"], "C")).toBe("A");
+  });
+
+  it("follows the rotation after the last workout done", () => {
+    expect(nextWorkoutKey([strength(MON, "A"), strength(WED, "B")], split)).toBe("C");
+    expect(nextWorkoutKey([strength(MON, "C")], split)).toBe("A");
+  });
+
+  it("starts a newly switched-in plan from its first workout", () => {
+    const history = [strength(MON, "A", `${MON}T07:00:00.000Z`), strength(WED, "B", `${WED}T07:00:00.000Z`)];
+    expect(nextWorkoutKey(history, split, `${WED}T09:00:00.000Z`)).toBe("A");
+    // Workouts done since the switch count again.
+    expect(nextWorkoutKey([...history, strength(FRI, "A", `${FRI}T07:00:00.000Z`)], split, `${WED}T09:00:00.000Z`)).toBe("B");
+  });
+
+  it("labels the week with the rotation, e.g. six days of Upper / Legs / Core", () => {
+    const sixDays = { ...days, trainingDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as DayName[], backCareDays: [] };
+    const today = buildToday(sixDays, [], MON, split);
+    expect(today.strip.map((day) => day.workout ?? "-").join("")).toBe("ABCABC-");
+    expect(today.workout).toBe("A");
   });
 });

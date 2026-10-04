@@ -3,24 +3,23 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { addSlot, fetchArchivedSlots, fetchTraining, updateSlots } from "@/lib/training/client";
+import { addSlot, fetchArchivedSlots, fetchTraining, renameWorkouts, updateSlots } from "@/lib/training/client";
 import { dumbbellOnlyChanges, exerciseGroups, slotUsesDumbbell } from "@/lib/training/customize";
 import { ladderFor, snapNearest, trimNumber } from "@/lib/training/equipment";
 import { getExercise, type ExerciseDef } from "@/lib/training/exercises";
 import { formatTarget } from "@/lib/training/format";
-import { slotsFor, workoutName } from "@/lib/training/template";
-import type { Equipment, Slot, TrainingData, WorkoutKey } from "@/lib/training/types";
+import { rotationFor } from "@/lib/training/schedule";
+import { slotsFor, workoutName, workoutTitle } from "@/lib/training/template";
+import { isWorkoutKey, WORKOUT_KEYS, type Equipment, type Slot, type TrainingData, type WorkoutKey } from "@/lib/training/types";
 import type { SlotUpdate } from "@/lib/training/validate";
 
 import { ExerciseThumb } from "./ExerciseImages";
 import { ProblemCard, Spinner, SubPage } from "./PageStates";
 import type { LoadProblem } from "./useTrainingHistory";
 
-const WORKOUTS: WorkoutKey[] = ["A", "B"];
-
 type Picker = { mode: "add"; workout: WorkoutKey } | { mode: "swap"; slot: Slot };
 
-/** Change what's in Workout A and B: swap, add, remove, reorder, and set the targets. */
+/** Change what's in each workout: swap, add, remove, reorder, set the targets, and name or add workouts. */
 export function WorkoutEditor() {
   const [data, setData] = useState<TrainingData | null>(null);
   const [stale, setStale] = useState(false);
@@ -31,6 +30,8 @@ export function WorkoutEditor() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Slot | null>(null);
   const [picker, setPicker] = useState<Picker | null>(null);
+  const [naming, setNaming] = useState<{ key: WorkoutKey; isNew: boolean } | null>(null);
+  const [confirmRemoveWorkout, setConfirmRemoveWorkout] = useState(false);
 
   const reload = useCallback(async () => {
     const [training, removed] = await Promise.all([fetchTraining(), fetchArchivedSlots().catch(() => null)]);
@@ -44,7 +45,8 @@ export function WorkoutEditor() {
 
   useEffect(() => {
     // `?w=B` opens on Workout B (read here rather than with useSearchParams so the page stays static).
-    if (new URLSearchParams(window.location.search).get("w") === "B") setWorkout("B");
+    const requested = new URLSearchParams(window.location.search).get("w");
+    if (isWorkoutKey(requested)) setWorkout(requested);
     void reload();
   }, [reload]);
 
@@ -80,6 +82,11 @@ export function WorkoutEditor() {
   }
 
   const { equipment } = data.programme;
+  const rotation = rotationFor(data.slots);
+  // A workout being created has no exercises yet, so it isn't in the rotation until one is added.
+  const tabs = rotation.includes(workout) ? rotation : [...rotation, workout].sort();
+  const title = (key: WorkoutKey) => workoutTitle(data.programme, key);
+  const freeKey = WORKOUT_KEYS.find((key) => !tabs.includes(key)) ?? null;
   const slots = slotsFor(data.slots, workout);
   const removed = archived.filter((slot) => slot.workout === workout);
   const locked = stale || busy !== null;
@@ -105,31 +112,54 @@ export function WorkoutEditor() {
           </p>
         )}
 
+        <Link
+          href="/plans"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-3"
+        >
+          <span>
+            <span className="block text-sm font-medium text-white">Ready-made plans</span>
+            <span className="block text-xs text-white/45">
+              Now: {data.programme.name}. Switch to another plan, or save this one.
+            </span>
+          </span>
+          <span className="shrink-0 text-sm text-white/50">→</span>
+        </Link>
+
         <DumbbellOnly
           data={data}
+          rotation={rotation}
           disabled={locked}
           onApply={(changes) => void run("Switching to dumbbells…", () => updateSlots(changes))}
         />
 
-        <div className="flex rounded-2xl border border-[var(--color-line)] p-1" role="tablist" aria-label="Workout">
-          {WORKOUTS.map((key) => (
+        <div className="grid gap-1 rounded-2xl border border-[var(--color-line)] p-1" style={{ gridTemplateColumns: `repeat(${tabs.length + (freeKey ? 1 : 0)}, minmax(0, 1fr))` }} role="tablist" aria-label="Workout">
+          {tabs.map((key) => (
             <button
               key={key}
               role="tab"
               aria-selected={workout === key}
-              onClick={() => setWorkout(key)}
-              className={`flex-1 rounded-xl px-3 py-2 text-left transition ${
-                workout === key ? "bg-[var(--color-surface-2)]" : ""
-              }`}
+              onClick={() => {
+                setWorkout(key);
+                setConfirmRemoveWorkout(false);
+              }}
+              className={`min-w-0 rounded-xl px-2.5 py-2 text-left transition ${workout === key ? "bg-[var(--color-surface-2)]" : ""}`}
             >
-              <span className={`block text-sm font-semibold ${workout === key ? "text-white" : "text-white/50"}`}>
-                Workout {key}
+              <span className={`block truncate text-sm font-semibold ${workout === key ? "text-white" : "text-white/50"}`}>
+                {title(key)}
               </span>
-              <span className="block truncate text-xs text-white/40">
-                {workoutName(slotsFor(data.slots, key))}
-              </span>
+              <span className="block truncate text-xs text-white/40">{workoutName(slotsFor(data.slots, key))}</span>
             </button>
           ))}
+          {freeKey && (
+            <button
+              onClick={() => setNaming({ key: freeKey, isNew: true })}
+              disabled={locked}
+              aria-label="New workout"
+              className="rounded-xl px-2 py-2 text-sm font-semibold text-[var(--color-work)] hover:bg-white/5 disabled:opacity-50"
+            >
+              + New
+            </button>
+          )}
         </div>
 
         {error && (
@@ -138,7 +168,7 @@ export function WorkoutEditor() {
           </p>
         )}
 
-        <section aria-label={`Workout ${workout} exercises`}>
+        <section aria-label={`${title(workout)} exercises`}>
           <ul className="divide-y divide-[var(--color-line)] rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)]">
             {slots.map((slot, index) => (
               <SlotRow
@@ -158,14 +188,37 @@ export function WorkoutEditor() {
             disabled={locked}
             className="mt-3 w-full rounded-2xl border border-dashed border-[var(--color-work)]/50 py-3 text-sm font-semibold text-[var(--color-work)] transition hover:bg-[var(--color-work)]/5 disabled:opacity-50"
           >
-            + Add an exercise to Workout {workout}
+            + Add an exercise to {title(workout)}
           </button>
           {busy && <p className="mt-2 text-center text-xs text-white/45">{busy}</p>}
+          <div className="mt-3 flex justify-center gap-5 text-sm">
+            <button onClick={() => setNaming({ key: workout, isNew: false })} disabled={locked} className="text-white/50 hover:text-white disabled:opacity-50">
+              Rename
+            </button>
+            {rotation.length > 1 && slots.length > 0 && (
+              <button
+                onClick={() =>
+                  confirmRemoveWorkout
+                    ? void run(`Removing ${title(workout)}…`, () => updateSlots(slots.map((slot) => ({ id: slot.id, archived: true })))).then(
+                        (done) => {
+                          setConfirmRemoveWorkout(false);
+                          if (done) setWorkout(rotation.find((key) => key !== workout) ?? "A");
+                        },
+                      )
+                    : setConfirmRemoveWorkout(true)
+                }
+                disabled={locked}
+                className="text-red-300/70 hover:text-red-300 disabled:opacity-50"
+              >
+                {confirmRemoveWorkout ? `Tap again to remove ${title(workout)}` : "Remove this workout"}
+              </button>
+            )}
+          </div>
         </section>
 
         {removed.length > 0 && (
           <section>
-            <h2 className="mb-2 text-xs tracking-[0.15em] text-white/40 uppercase">Removed from Workout {workout}</h2>
+            <h2 className="mb-2 text-xs tracking-[0.15em] text-white/40 uppercase">Removed from {title(workout)}</h2>
             <ul className="divide-y divide-[var(--color-line)] rounded-2xl border border-[var(--color-line)]">
               {removed.map((slot) => (
                 <li key={slot.id} className="flex items-center gap-3 px-3 py-2.5">
@@ -187,9 +240,28 @@ export function WorkoutEditor() {
         <BackCareNote data={data} />
       </div>
 
+      {naming && (
+        <NameSheet
+          isNew={naming.isNew}
+          current={naming.isNew ? "" : (data.programme.workoutNames?.[naming.key] ?? "")}
+          fallback={`Workout ${naming.key}`}
+          disabled={locked}
+          onClose={() => setNaming(null)}
+          onSave={async (name) => {
+            const key = naming.key;
+            if (await run("Saving the name…", () => renameWorkouts({ [key]: name }))) {
+              setNaming(null);
+              setWorkout(key);
+              if (naming.isNew) setPicker({ mode: "add", workout: key });
+            }
+          }}
+        />
+      )}
+
       {editing && (
         <SlotSheet
           slot={editing}
+          workoutTitle={title(editing.workout)}
           equipment={equipment}
           onlyOne={slots.length <= 1}
           disabled={locked}
@@ -208,6 +280,7 @@ export function WorkoutEditor() {
         <PickerSheet
           picker={picker}
           equipment={equipment}
+          workoutTitle={title(picker.mode === "add" ? picker.workout : picker.slot.workout)}
           inWorkout={slotsFor(data.slots, picker.mode === "add" ? picker.workout : picker.slot.workout).map((slot) => slot.exerciseId)}
           disabled={locked}
           onClose={() => setPicker(null)}
@@ -233,10 +306,12 @@ export function WorkoutEditor() {
 
 function DumbbellOnly({
   data,
+  rotation,
   disabled,
   onApply,
 }: {
   data: TrainingData;
+  rotation: WorkoutKey[];
   disabled: boolean;
   onApply: (changes: SlotUpdate[]) => void;
 }) {
@@ -255,12 +330,12 @@ function DumbbellOnly({
     <section className="rounded-3xl border border-[var(--color-work)]/30 bg-[var(--color-surface)] p-4">
       <h2 className="font-semibold text-white">Only dumbbell exercises?</h2>
       <p className="mt-1 text-sm text-white/55">One tap swaps the bodyweight moves for dumbbell versions:</p>
-      {WORKOUTS.map((key) => {
+      {rotation.map((key) => {
         const forWorkout = changes.filter((change) => byId.get(change.id)?.workout === key);
         if (!forWorkout.length) return null;
         return (
           <div key={key} className="mt-2">
-            <p className="text-xs tracking-[0.15em] text-white/35 uppercase">Workout {key}</p>
+            <p className="text-xs tracking-[0.15em] text-white/35 uppercase">{workoutTitle(data.programme, key)}</p>
             <ul className="mt-1 space-y-1 text-sm text-white/75">
               {forWorkout.map((change) => {
                 const from = getExercise(byId.get(change.id)!.exerciseId).name;
@@ -425,6 +500,7 @@ type Draft = Pick<Slot, "sets" | "repMin" | "repMax" | "seconds" | "maxSeconds" 
 
 function SlotSheet({
   slot,
+  workoutTitle: owner,
   equipment,
   onlyOne,
   disabled,
@@ -433,6 +509,7 @@ function SlotSheet({
   onSave,
 }: {
   slot: Slot;
+  workoutTitle: string;
   equipment: Equipment;
   onlyOne: boolean;
   disabled: boolean;
@@ -568,14 +645,14 @@ function SlotSheet({
       </button>
 
       {onlyOne ? (
-        <p className="mt-3 text-center text-xs text-white/40">A workout needs at least one exercise.</p>
+        <p className="mt-3 text-center text-xs text-white/40">The last exercise in a workout stays. Remove the whole workout instead.</p>
       ) : (
         <button
           onClick={() => (confirmRemove ? onSave({ id: slot.id, archived: true }) : setConfirmRemove(true))}
           disabled={disabled}
           className="mt-3 w-full rounded-2xl border border-red-500/30 py-3 text-sm text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
         >
-          {confirmRemove ? `Tap again to remove from Workout ${slot.workout}` : `Remove from Workout ${slot.workout}`}
+          {confirmRemove ? `Tap again to remove from ${owner}` : `Remove from ${owner}`}
         </button>
       )}
       <p className="mt-2 text-center text-xs text-white/35">Removing keeps its history; you can put it back.</p>
@@ -618,6 +695,7 @@ function Stepper({
 function PickerSheet({
   picker,
   equipment,
+  workoutTitle: owner,
   inWorkout,
   disabled,
   onClose,
@@ -625,6 +703,7 @@ function PickerSheet({
 }: {
   picker: Picker;
   equipment: Equipment;
+  workoutTitle: string;
   inWorkout: string[];
   disabled: boolean;
   onClose: () => void;
@@ -637,7 +716,7 @@ function PickerSheet({
     exclude: current ? [current.id] : [],
     prefer: current?.pattern,
   });
-  const label = picker.mode === "add" ? `Add to Workout ${picker.workout}` : `Swap ${current?.name.toLowerCase()} for…`;
+  const label = picker.mode === "add" ? `Add to ${owner}` : `Swap ${current?.name.toLowerCase()} for…`;
 
   return (
     <Sheet label={label} onClose={onClose}>
@@ -687,6 +766,57 @@ function PickerSheet({
           </section>
         ))}
       </div>
+    </Sheet>
+  );
+}
+
+function NameSheet({
+  isNew,
+  current,
+  fallback,
+  disabled,
+  onClose,
+  onSave,
+}: {
+  isNew: boolean;
+  current: string;
+  fallback: string;
+  disabled: boolean;
+  onClose: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState(current);
+  return (
+    <Sheet label={isNew ? "New workout" : "Rename workout"} onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(name.trim());
+        }}
+      >
+        <label className="block text-sm text-white/60">
+          Name
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={40}
+            placeholder={isNew ? "e.g. Arms, Full body C" : fallback}
+            autoFocus
+            className="mt-1 block w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2.5 text-base text-white outline-none focus:border-[var(--color-work)]"
+          />
+        </label>
+        <p className="mt-2 text-xs text-white/40">
+          {isNew
+            ? "It joins the rotation once it has an exercise. Workouts take turns on your training days."
+            : `Leave it empty to go back to "${fallback}".`}
+        </p>
+        <button
+          disabled={disabled || (isNew && !name.trim())}
+          className="mt-4 w-full rounded-2xl bg-[var(--color-work)] py-3.5 font-semibold text-[var(--color-ink)] transition active:scale-95 disabled:opacity-40"
+        >
+          {isNew ? "Next: add exercises" : "Save"}
+        </button>
+      </form>
     </Sheet>
   );
 }

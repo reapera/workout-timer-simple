@@ -111,7 +111,8 @@ describe("input checks", () => {
     expect(() => parseSlotUpdates({ updates: [{ id: "a", exerciseId: "cat-cow" }] })).toThrow(InputError);
     expect(() => parseSlotUpdates({ updates: [{ id: "a", repMin: 12, repMax: 8 }] })).toThrow(/rep range/);
     expect(() => parseSlotUpdates({ updates: [] })).toThrow(/Nothing/);
-    expect(() => parseNewSlot({ workout: "C", exerciseId: "dumbbell-curl" })).toThrow(InputError);
+    expect(() => parseNewSlot({ workout: "E", exerciseId: "dumbbell-curl" })).toThrow(InputError);
+    expect(parseNewSlot({ workout: "C", exerciseId: "farmer-carry" })).toEqual({ workout: "C", exerciseId: "farmer-carry" });
     expect(parseNewSlot({ workout: "B", exerciseId: "dumbbell-curl" })).toEqual({ workout: "B", exerciseId: "dumbbell-curl" });
   });
 });

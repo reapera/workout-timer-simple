@@ -13,6 +13,8 @@ calendar, and the app installs to your home screen and opens without signal.
 
 Everything about the workouts can be changed under **Edit workouts**: swap, add, remove and
 reorder exercises, set sets, reps, rest and weights, or make it dumbbell-only in one tap.
+**Plans** has ready-made plans to copy in (full body, Upper / Legs / Core, Upper / Lower), and
+keeps plans you save so you can switch back.
 
 ## The programme
 
@@ -22,7 +24,7 @@ lower back that needs care. This is the starting plan; change any of it under
 
 | Day | What |
 | --- | --- |
-| Mon · Wed · Fri | Strength — Workout A and Workout B alternate (A, B, A, then B, A, B…) |
+| Mon · Wed · Fri | Strength — Workout A and Workout B alternate (A, B, A, then B, A, B…). Plans with more workouts rotate through all of them |
 | Tue · Thu · Sat | Back care — 8 minutes of gentle core and mobility work, plus a walk if you can |
 | Sun | Rest |
 
@@ -102,6 +104,44 @@ turn them off in Plan settings by unselecting the days.
 The library now also has sumo squats, reverse lunges, step-ups, floor flies, lateral raises,
 seated reverse flies, biceps and hammer curls, lying triceps extensions, calf raises, farmer and
 suitcase carries, and the dumbbell dead bug, each with pictures and form cues.
+
+## Ready-made plans
+
+**Plans** (at the bottom of Today, in Edit workouts, and in Plan settings) lists plans you can
+copy into your workouts:
+
+| Plan | Workouts | Suggested days |
+| --- | --- | --- |
+| Full body A/B | The starting plan | Mon · Wed · Fri |
+| Full body, dumbbells only | The same, with a dumbbell in every exercise | Mon · Wed · Fri |
+| Upper / Legs / Core | Upper body, Legs, Core | Mon · Wed · Fri (each part once a week), or Mon to Sat (twice) |
+| Upper / Lower | Upper body, Lower body | Mon · Tue · Thu · Fri (each part twice a week) |
+
+**Splits vs full body.** Separate body-part days are fine, and enjoying the plan matters more
+than the "best" one. But on 3 days a week, a split trains each part once a week, and beginners
+usually progress faster at about twice a week. So Upper / Legs / Core is offered on 6 days too,
+and Upper / Lower gets twice a week from 4 days. The split keeps the back in mind:
+- The deadlift opens leg day, while you're fresh.
+- Core day never comes right before legs, because tired core muscles make heavy leg work
+  riskier for a back.
+
+**Switching plans:**
+- The current exercises are archived in Notion with their history, never deleted.
+- The plan's exercises are added, matched to your equipment (one-dumbbell versions with one
+  handle, for example).
+- Any weight you've already worked out for an exercise carries over.
+- The rotation starts again from the plan's first workout.
+- You can change your training days at the same time.
+- By default, your current workouts are saved as a plan first, so you can switch back with one
+  tap.
+
+**Saved plans** keep exercises, targets, rest and workout names. They live in a **Saved Plans**
+database that the app creates next to the others the first time you save one. **Remove** only
+archives a saved plan.
+
+In **Edit workouts** you can also rename a workout (e.g. "Arms"), add a workout (up to four), or
+remove a whole workout. Removed workouts drop out of the rotation and keep their exercises
+archived.
 
 ## Progress
 
@@ -201,10 +241,13 @@ and says which.
 
 **Training Programme**: one row, your plan. `Start Date`, `Training Days`, `Back Care Days`,
 `Handles`, `Handle Weight (kg)`, `Plates` (e.g. `1.25×4, 1.5×4, 2×4`), `Plates Per Side`,
-`Bench`, `Level`, `Back Pain`, `Active`, `Deload Until`, `Last Review`, `Reminder Time`. The last
-three are added to an existing database automatically the first time they're needed.
+`Bench`, `Level`, `Back Pain`, `Active`, `Deload Until`, `Last Review`, `Reminder Time`,
+`Workout Names` (e.g. `A: Upper body; B: Legs; C: Core`), `Plan Since` (when the current plan was
+switched in). The last five are added to an existing database automatically the first time
+they're needed.
 
-**Programme Exercises**: one row per exercise in Workout A or B, holding its current target.
+**Programme Exercises**: one row per exercise in a workout (A to D), holding its current
+target.
 `Exercise ID`, `Workout`, `Order`, `Sets`, `Rep Min`, `Rep Max`, `Seconds`, `Max Seconds`,
 `Rest (s)`, `Weight (kg)`, `Stretch`, `Stalls`, `Last Session`, `Last Done`, `Archived`.
 
@@ -229,6 +272,9 @@ entries:
 
 Timed sessions (the spoken timer, and back care) keep writing their single row as before:
 `Duration (s)` holds the work seconds, and `Reps` and `Level` stay empty.
+
+**Saved Plans** (created when you first save a plan): `Name`, `Plan` (the workouts, as text the
+app reads back and checks), `Archived`.
 
 **Weight Log** (existing, next to the Workout Log) feeds the body weight chart. Saving a weight
 on Progress adds a row: `Name` and `Date` are the day, `Weight (kg)` the weight, and `Body Fat %`
@@ -337,6 +383,8 @@ The tests cover:
 - the plate maths
 - every progression rule, including lighter weeks and carries
 - editing the workouts: swaps, targets, remove and put back, adding, dumbbell-only
+- plans: every ready-made plan is complete and doable, switching keeps weights and restarts the
+  rotation, saving and switching back, workouts C and D
 - the schedule and rotation
 - the workout state machine
 - progress read-outs and the 4-week review
@@ -386,7 +434,8 @@ require a connection.
 | `app/workout/` | The workout in progress |
 | `app/progress/` | Charts, the consistency calendar and body weight |
 | `app/review/` | The 4-week review |
-| `app/workouts/` | Edit workouts: swap, add, remove, reorder, targets, dumbbell-only |
+| `app/workouts/` | Edit workouts: swap, add, remove, reorder, targets, dumbbell-only, name and add workouts |
+| `app/plans/` | Ready-made and saved plans |
 | `app/setup/` | First-time setup, plan settings and reminders |
 | `app/exercises/` | Exercise guides: photos, steps, mistakes, back advice, demo video link |
 | `app/timer/`, `app/routines/` | The spoken interval timer and its routines |
@@ -394,7 +443,7 @@ require a connection.
 | `app/api/calendar/` | The calendar feed and its link |
 | `app/manifest.ts`, `public/sw.js`, `public/icons/` | Install to home screen and offline start-up |
 | `proxy.ts`, `app/unlock/` | Optional passcode lock |
-| `lib/training/` | Exercise library, plate maths, progression, schedule, workout state, editing, progress, reviews, calendar feed, Notion storage |
+| `lib/training/` | Exercise library, plans, plate maths, progression, schedule, workout state, editing, progress, reviews, calendar feed, Notion storage |
 | `lib/useTimer.ts` | Interval engine |
 | `lib/notion.ts` | Notion REST client and timer routines |
 | `lib/audio.ts` | Speech and beeps |

@@ -1,4 +1,5 @@
 import type { StripDay } from "@/lib/training/schedule";
+import type { WorkoutKey } from "@/lib/training/types";
 
 const PLAN_COLOR = {
   strength: "var(--color-work)",
@@ -7,15 +8,24 @@ const PLAN_COLOR = {
 } as const;
 
 /** Monday to Sunday at a glance: what each day is for and whether it happened. */
-export function WeekStrip({ strip }: { strip: StripDay[] }) {
+export function WeekStrip({
+  strip,
+  initials = {},
+  titles = {},
+}: {
+  strip: StripDay[];
+  /** "U" for Upper body; the letter otherwise. */
+  initials?: Partial<Record<WorkoutKey, string>>;
+  titles?: Partial<Record<WorkoutKey, string>>;
+}) {
   return (
     <ol className="grid grid-cols-7 gap-1.5" aria-label="This week">
       {strip.map((day) => {
         const color = PLAN_COLOR[day.plan];
-        const label =
-          day.plan === "strength" ? (day.workout ?? "A") : day.plan === "backcare" ? "BC" : "–";
+        const key = day.workout ?? "A";
+        const label = day.plan === "strength" ? (initials[key] ?? key) : day.plan === "backcare" ? "BC" : "–";
         const description = `${day.day}: ${
-          day.plan === "strength" ? `Workout ${label}` : day.plan === "backcare" ? "back care" : "rest"
+          day.plan === "strength" ? (titles[key] ?? `Workout ${key}`) : day.plan === "backcare" ? "back care" : "rest"
         }, ${day.status}`;
 
         return (

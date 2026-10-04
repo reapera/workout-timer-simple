@@ -30,6 +30,8 @@ function data(overrides: Partial<TrainingData> = {}): TrainingData {
       deloadUntil: null,
       lastReview: 0,
       reminderTime: null,
+      workoutNames: {},
+      planSince: null,
     },
     slots: buildSlots(DEFAULT_EQUIPMENT).map((seed, index) => ({
       ...seed,

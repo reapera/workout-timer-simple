@@ -1,8 +1,9 @@
 "use client";
 
 import { readError, readJson, writeJson, type ApiFailure } from "../client";
-import type { History, SessionLog, Slot, TrainingData } from "./types";
-import type { BodyWeightInput, NewSlotInput, ProgrammeInput, ReviewInput, SlotUpdate } from "./validate";
+import type { PlanWorkout } from "./plans";
+import type { History, SessionLog, Slot, TrainingData, WorkoutKey } from "./types";
+import type { ApplyPlanInput, BodyWeightInput, NewSlotInput, ProgrammeInput, ReviewInput, SlotUpdate } from "./validate";
 import { applySession, applyWorkout, toSessionLog, type WorkoutState } from "./workout";
 
 const DATA_KEY = "wt.training.v1";
@@ -203,4 +204,32 @@ export async function fetchArchivedSlots(): Promise<Slot[]> {
   const response = await fetch("/api/training/slots", { cache: "no-store" });
   if (!response.ok) throw new Error((await readError(response)).message);
   return ((await response.json()) as { archived: Slot[] }).archived;
+}
+
+/* ------------------------------------------------------------------ *
+ * Plans (needs a connection)
+ * ------------------------------------------------------------------ */
+
+export type SavedPlan = { id: string; name: string; workouts: PlanWorkout[]; savedAt: string };
+
+export async function fetchSavedPlans(): Promise<SavedPlan[]> {
+  const response = await fetch("/api/training/plans", { cache: "no-store" });
+  if (!response.ok) throw new Error((await readError(response)).message);
+  return ((await response.json()) as { saved: SavedPlan[] }).saved;
+}
+
+export function saveCurrentPlan(name: string): Promise<void> {
+  return send("/api/training/plans", "POST", { name });
+}
+
+export function removeSavedPlan(id: string): Promise<void> {
+  return send("/api/training/plans", "PATCH", { id });
+}
+
+export function applyPlan(input: ApplyPlanInput): Promise<void> {
+  return send("/api/training/plans/apply", "POST", input);
+}
+
+export function renameWorkouts(names: Partial<Record<WorkoutKey, string>>): Promise<void> {
+  return send("/api/training/workout-names", "PATCH", { names });
 }

@@ -17,6 +17,8 @@ const PROGRAMME: Programme = {
   deloadUntil: null,
   lastReview: 0,
   reminderTime: null,
+      workoutNames: {},
+      planSince: null,
 };
 
 function data(programme: Partial<Programme> = {}): TrainingData {

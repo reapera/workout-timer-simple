@@ -1,42 +1,23 @@
+import { canDo } from "./customize";
 import { getExercise, type ExerciseDef, type Pattern, type Prescription } from "./exercises";
-import type { Equipment, Level, Slot, WorkoutKey } from "./types";
+import { DEFAULT_PLAN, type Plan } from "./plans";
+import type { Equipment, Level, Programme, Slot, WorkoutKey } from "./types";
 
 /**
- * The home dumbbell programme: two full-body workouts, alternated. Chosen for
- * a beginner aiming at general fitness with a lower back that needs care:
+ * Turning a plan into programme rows, plus the defaults and labels that go
+ * with them. The starting plan (two full-body workouts, alternated) is chosen
+ * for a beginner aiming at general fitness with a lower back that needs care:
  * front-loaded or floor-supported lifts, a light hip hinge to strengthen the
  * back, and core work that trains the spine to stay still.
  */
 
 export type SlotSeed = Omit<Slot, "id" | "lastSession" | "lastDone">;
 
-type Entry = {
-  exerciseId: string;
-  workout: WorkoutKey;
-  sets: number;
-  reps?: [number, number];
-  seconds?: [number, number];
-  rest: number;
-};
-
-export const WORKOUT_NAMES: Record<WorkoutKey, string> = {
+/** What the starting plan's two workouts are made of, for the exercise library. */
+export const WORKOUT_NAMES: Record<"A" | "B", string> = {
   A: "Squat · Press · Row",
   B: "Hinge · Lunge · Press",
 };
-
-const PROGRAMME: Entry[] = [
-  { exerciseId: "goblet-squat", workout: "A", sets: 3, reps: [10, 15], rest: 90 },
-  { exerciseId: "floor-press", workout: "A", sets: 3, reps: [10, 15], rest: 90 },
-  { exerciseId: "one-arm-row", workout: "A", sets: 3, reps: [10, 15], rest: 60 },
-  { exerciseId: "glute-bridge", workout: "A", sets: 2, reps: [12, 20], rest: 60 },
-  { exerciseId: "dead-bug", workout: "A", sets: 2, reps: [6, 10], rest: 45 },
-
-  { exerciseId: "romanian-deadlift", workout: "B", sets: 3, reps: [10, 15], rest: 90 },
-  { exerciseId: "split-squat", workout: "B", sets: 3, reps: [8, 12], rest: 60 },
-  { exerciseId: "shoulder-press", workout: "B", sets: 3, reps: [10, 15], rest: 60 },
-  { exerciseId: "bird-dog", workout: "B", sets: 2, reps: [6, 10], rest: 45 },
-  { exerciseId: "side-plank", workout: "B", sets: 2, seconds: [20, 45], rest: 45 },
-];
 
 /** The programme's own exercise behind an equipment-specific variant. */
 export function canonicalExercise(exerciseId: string): string {
@@ -57,6 +38,7 @@ export function substitute(exerciseId: string, equipment: Equipment): string {
       "bench-press": "floor-press-one-arm",
       "romanian-deadlift": "romanian-deadlift-single",
       "split-squat": "split-squat-goblet",
+      "farmer-carry": "suitcase-carry",
     };
     return single[exerciseId] ?? exerciseId;
   }
@@ -67,7 +49,9 @@ export function substitute(exerciseId: string, equipment: Equipment): string {
 /** What a newly added exercise starts with: its own default, the plan's, or one by kind. */
 export function prescriptionFor(exercise: ExerciseDef): Prescription {
   if (exercise.prescription) return exercise.prescription;
-  const entry = PROGRAMME.find((candidate) => candidate.exerciseId === canonicalExercise(exercise.id));
+  const entry = DEFAULT_PLAN.workouts
+    .flatMap((workout) => workout.entries)
+    .find((candidate) => candidate.exerciseId === canonicalExercise(exercise.id));
   if (entry) return { sets: entry.sets, reps: entry.reps, seconds: entry.seconds, rest: entry.rest };
   if (exercise.kind === "timed") return { sets: 2, seconds: [20, 45], rest: 45 };
   return exercise.load === "none" ? { sets: 2, reps: [8, 12], rest: 45 } : { sets: 3, reps: [10, 15], rest: 90 };
@@ -128,30 +112,59 @@ export function workoutName(slots: Slot[]): string {
   return names.slice(0, 3).join(" · ") || "No exercises yet";
 }
 
-export function buildSlots(equipment: Equipment): SlotSeed[] {
-  const order: Record<WorkoutKey, number> = { A: 0, B: 0 };
-
-  return PROGRAMME.map((entry) => {
-    const exerciseId = substitute(entry.exerciseId, equipment);
-    const exercise = getExercise(exerciseId);
-    order[entry.workout] += 1;
-
-    return {
-      exerciseId,
-      workout: entry.workout,
-      order: order[entry.workout],
-      sets: entry.sets,
-      repMin: entry.reps?.[0] ?? null,
-      repMax: entry.reps?.[1] ?? null,
-      seconds: entry.seconds?.[0] ?? null,
-      maxSeconds: entry.seconds?.[1] ?? null,
-      rest: entry.rest,
-      // Loaded lifts start by finding your weight; bodyweight moves start at 0.
-      weight: exercise.load === "none" || exercise.bodyweightStart ? 0 : null,
-      stretch: 0,
-      stalls: 0,
-    };
+/**
+ * Programme rows for a plan, matched to your equipment: one-handle and bench
+ * variants swapped in, and anything your dumbbells can't do left out.
+ */
+export function seedsForPlan(plan: Pick<Plan, "workouts">, equipment: Equipment): SlotSeed[] {
+  return plan.workouts.flatMap((workout) => {
+    let order = 0;
+    return workout.entries.flatMap((entry): SlotSeed[] => {
+      const exerciseId = substitute(entry.exerciseId, equipment);
+      const exercise = getExercise(exerciseId);
+      if (!canDo(exercise, equipment)) return [];
+      order += 1;
+      return [
+        {
+          exerciseId,
+          workout: workout.key,
+          order,
+          sets: entry.sets,
+          ...targetsFor(exercise, entry),
+          rest: entry.rest,
+          // Loaded lifts start by finding your weight; bodyweight moves start at 0 unless the plan says otherwise.
+          weight: entry.loaded && exercise.load !== "none" ? null : startingWeight(exercise),
+          stretch: 0,
+          stalls: 0,
+        },
+      ];
+    });
   });
+}
+
+/** The starting plan's rows. */
+export function buildSlots(equipment: Equipment): SlotSeed[] {
+  return seedsForPlan(DEFAULT_PLAN, equipment);
+}
+
+/** "Upper body", or "Workout A" for an unnamed workout. */
+export function workoutTitle(programme: Pick<Programme, "workoutNames">, workout: WorkoutKey): string {
+  // `?.`: a plan cached on the phone by an older version has no names.
+  return programme.workoutNames?.[workout]?.trim() || `Workout ${workout}`;
+}
+
+/** One or two characters for the week strip: "U" for Upper body, else the letter. */
+export function workoutInitials(
+  programme: Pick<Programme, "workoutNames">,
+  rotation: readonly WorkoutKey[],
+): Record<WorkoutKey, string> {
+  const initials = Object.fromEntries(
+    rotation.map((key) => [key, programme.workoutNames?.[key]?.trim().charAt(0).toUpperCase() || key]),
+  ) as Record<WorkoutKey, string>;
+  // Two names starting with the same letter would be ambiguous: use the letters instead.
+  const values = rotation.map((key) => initials[key]);
+  if (new Set(values).size !== values.length) for (const key of rotation) initials[key] = key;
+  return initials;
 }
 
 /** Beginners ease in: at most two sets per exercise in weeks 1–2. */

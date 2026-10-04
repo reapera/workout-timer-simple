@@ -239,6 +239,18 @@ export function SetupForm() {
             </span>
             <span className="shrink-0 text-sm text-white/50">→</span>
           </Link>
+          <Link
+            href="/plans"
+            className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-3"
+          >
+            <span>
+              <span className="block text-sm font-medium text-white">Ready-made plans</span>
+              <span className="block text-xs text-white/45">
+                Full body, Upper / Legs / Core, Upper / Lower — or plans you&apos;ve saved.
+              </span>
+            </span>
+            <span className="shrink-0 text-sm text-white/50">→</span>
+          </Link>
         </Section>
       )}
 

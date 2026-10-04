@@ -19,12 +19,23 @@ import { EXERCISES, getExercise } from "./exercises";
 import { formatKg, formatValues } from "./format";
 import { decide, workingSets, type Decision, type Outcome } from "./progression";
 import { BACK_CARE } from "./routines";
+import {
+  DEFAULT_PLAN,
+  formatWorkoutNames,
+  getPlan,
+  parseSavedWorkouts,
+  parseWorkoutNames,
+  serializeWorkouts,
+  snapshotWorkouts,
+  type PlanWorkout,
+} from "./plans";
 import { addDays, DELOAD_DAYS, inDeload } from "./schedule";
 import {
   buildSlots,
   canonicalExercise,
   prescriptionFor,
   seedFor,
+  seedsForPlan,
   startingWeight,
   substitute,
   targetsFor,
@@ -32,6 +43,7 @@ import {
 } from "./template";
 import {
   DAYS,
+  isWorkoutKey,
   type BackFeel,
   type DayName,
   type Effort,
@@ -45,9 +57,11 @@ import {
   type Slot,
   type TrainingData,
   type WeightEntry,
+  type WorkoutKey,
 } from "./types";
 import {
   InputError,
+  type ApplyPlanInput,
   type BodyWeightInput,
   type NewSlotInput,
   type ProgrammeInput,
@@ -108,6 +122,8 @@ export const SCHEMAS: DatabaseSchema[] = [
       "Deload Until": { type: "date" },
       "Last Review": { type: "number" },
       "Reminder Time": { type: "rich_text" },
+      "Workout Names": { type: "rich_text" },
+      "Plan Since": { type: "rich_text" },
     },
   },
   {
@@ -116,7 +132,7 @@ export const SCHEMAS: DatabaseSchema[] = [
     properties: {
       Name: { type: "title" },
       "Exercise ID": { type: "rich_text" },
-      Workout: { type: "select", options: ["A", "B"] },
+      Workout: { type: "select", options: ["A", "B", "C", "D"] },
       Order: { type: "number" },
       Sets: { type: "number" },
       "Rep Min": { type: "number" },
@@ -139,7 +155,7 @@ export const SCHEMAS: DatabaseSchema[] = [
       Name: { type: "title" },
       Date: { type: "date" },
       Session: { type: "rich_text" },
-      Workout: { type: "select", options: ["A", "B"] },
+      Workout: { type: "select", options: ["A", "B", "C", "D"] },
       "Exercise ID": { type: "rich_text" },
       "Weight (kg)": { type: "number" },
       Sets: { type: "number" },
@@ -178,7 +194,7 @@ export class ConflictError extends Error {}
  * Property helpers
  * ------------------------------------------------------------------ */
 
-type Page = NotionPage & { created_time?: string };
+type Page = NotionPage & { created_time?: string; last_edited_time?: string };
 
 function readText(page: Page, key: string): string {
   const parts = page.properties?.[key]?.rich_text ?? [];
@@ -219,9 +235,15 @@ function definition(def: DatabaseSchema["properties"][string]) {
  * Finding (and creating) the databases
  * ------------------------------------------------------------------ */
 
-type Discovery = { parentId: string | null; found: Partial<Dbs>; weightLog: string | null };
+type Discovery = {
+  parentId: string | null;
+  found: Partial<Dbs>;
+  weightLog: string | null;
+  savedPlans: string | null;
+};
 
 const WEIGHT_LOG_TITLE = "weight log";
+const SAVED_PLANS_TITLE = "Saved Plans";
 
 let discoveryCache: { at: number; value: Discovery } | null = null;
 const DISCOVERY_TTL_MS = 10 * 60 * 1000;
@@ -243,7 +265,10 @@ function overrides(): Partial<Dbs> {
 async function discover(fresh = false): Promise<Discovery> {
   const found = overrides();
   let weightLog = process.env.NOTION_WEIGHT_LOG_DB || null;
-  if (SCHEMAS.every((schema) => found[schema.key]) && weightLog) return { parentId: null, found, weightLog };
+  let savedPlans = process.env.NOTION_SAVED_PLANS_DB || null;
+  if (SCHEMAS.every((schema) => found[schema.key]) && weightLog && savedPlans) {
+    return { parentId: null, found, weightLog, savedPlans };
+  }
   if (!fresh && discoveryCache && Date.now() - discoveryCache.at < DISCOVERY_TTL_MS) {
     return discoveryCache.value;
   }
@@ -274,11 +299,12 @@ async function discover(fresh = false): Promise<Discovery> {
       const schema = SCHEMAS.find((candidate) => candidate.title.toLowerCase() === name);
       if (schema && !found[schema.key]) found[schema.key] = block.id;
       if (name === WEIGHT_LOG_TITLE && !weightLog) weightLog = block.id;
+      if (name === SAVED_PLANS_TITLE.toLowerCase() && !savedPlans) savedPlans = block.id;
     }
     cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
   } while (cursor);
 
-  const value = { parentId, found, weightLog };
+  const value = { parentId, found, weightLog, savedPlans };
   // Only a complete answer is worth remembering; a partial one is about to change.
   discoveryCache = SCHEMAS.every((schema) => found[schema.key]) ? { at: Date.now(), value } : null;
   return value;
@@ -400,6 +426,8 @@ function toProgramme(page: Page): Programme {
     deloadUntil: readDate(page, "Deload Until")?.slice(0, 10) ?? null,
     lastReview: Math.max(0, Math.round(readNumber(page, "Last Review") ?? 0)),
     reminderTime: parseTime(readText(page, "Reminder Time")),
+    workoutNames: parseWorkoutNames(readText(page, "Workout Names")),
+    planSince: readText(page, "Plan Since") || null,
   };
 }
 
@@ -415,7 +443,7 @@ function parseTime(value: string): string | null {
 function toSlot(page: Page): Slot | null {
   const exerciseId = readText(page, "Exercise ID");
   const workout = readSelect(page, "Workout");
-  if (!exerciseId || (workout !== "A" && workout !== "B")) return null;
+  if (!exerciseId || !isWorkoutKey(workout)) return null;
   const whole = (key: string, fallback: number) => Math.round(readNumber(page, key) ?? fallback);
 
   return {
@@ -520,7 +548,7 @@ async function readTraining(): Promise<TrainingResponse> {
   for (const row of recentLifts.results) {
     const day = readDate(row, "Date")?.slice(0, 10);
     const workout = readSelect(row, "Workout");
-    if (!day || (workout !== "A" && workout !== "B")) continue;
+    if (!day || !isWorkoutKey(workout)) continue;
 
     const key = readText(row, "Session") || `${day}:${workout}`;
     const at = row.created_time;
@@ -626,7 +654,7 @@ export async function createProgramme(input: ProgrammeInput): Promise<void> {
       body: {
         parent: { database_id: dbs.programme },
         properties: {
-          Name: title("Home dumbbell plan"),
+          Name: title(DEFAULT_PLAN.name),
           Active: { checkbox: true },
           ...programmeProperties(input),
         },
@@ -861,7 +889,7 @@ export async function loadHistory(): Promise<History> {
     const day = readDate(row, "Date")?.slice(0, 10);
     const workout = readSelect(row, "Workout");
     const exerciseId = readText(row, "Exercise ID");
-    if (!day || !exerciseId || (workout !== "A" && workout !== "B")) return [];
+    if (!day || !exerciseId || !isWorkoutKey(workout)) return [];
     return [
       {
         date: day,
@@ -1045,17 +1073,14 @@ export async function updateSlots(updates: SlotUpdate[]): Promise<void> {
     if (!byId.has(normalizeId(update.id))) throw new InputError("That exercise is no longer in your plan");
   }
 
-  // Each workout keeps at least one exercise.
+  // The plan keeps at least one exercise. (Emptying one workout removes it from the rotation.)
   const archived = new Map(pages.map((page) => [normalizeId(page.id), readCheckbox(page, "Archived")]));
   for (const update of updates) {
     if (update.archived !== undefined) archived.set(normalizeId(update.id), update.archived);
   }
-  for (const workout of ["A", "B"]) {
-    const rows = pages.filter((page) => readSelect(page, "Workout") === workout);
-    const had = rows.some((page) => !readCheckbox(page, "Archived"));
-    const has = rows.some((page) => !archived.get(normalizeId(page.id)));
-    if (had && !has) throw new InputError(`Workout ${workout} needs at least one exercise`);
-  }
+  const had = pages.some((page) => !readCheckbox(page, "Archived"));
+  const has = pages.some((page) => !archived.get(normalizeId(page.id)));
+  if (had && !has) throw new InputError("Your plan needs at least one exercise");
 
   await inBatches(updates, 3, (update) => {
     const page = byId.get(normalizeId(update.id))!;
@@ -1085,4 +1110,167 @@ export async function addSlot(input: NewSlotInput): Promise<string> {
     },
   });
   return page.id;
+}
+
+/* ------------------------------------------------------------------ *
+ * Plans: switching to a ready-made or saved plan, and saving your own
+ * ------------------------------------------------------------------ */
+
+/** Rich text split into pieces under Notion's 2,000-character limit. */
+function longText(content: string) {
+  const pieces = content.match(/[\s\S]{1,1800}/g) ?? [];
+  return { rich_text: pieces.map((piece) => ({ text: { content: piece } })) };
+}
+
+export type SavedPlan = { id: string; name: string; workouts: PlanWorkout[]; savedAt: string };
+
+/** Your saved plans, newest first. None until the first one is saved. */
+export async function loadSavedPlans(): Promise<SavedPlan[]> {
+  const { savedPlans } = await discover();
+  if (!savedPlans) return [];
+  const pages = (await queryAll(savedPlans, {
+    filter: { property: "Archived", checkbox: { equals: false } },
+    sorts: [{ timestamp: "created_time", direction: "descending" }],
+  })) as Page[];
+  return pages.flatMap((page): SavedPlan[] => {
+    const workouts = parseSavedWorkouts(readText(page, "Plan"));
+    if (!workouts) return [];
+    return [{ id: page.id, name: readTitle(page, "Name") || "Saved plan", workouts, savedAt: page.created_time ?? "" }];
+  });
+}
+
+/** The "Saved Plans" database, created next to the others the first time a plan is saved. */
+async function ensureSavedPlansDb(): Promise<string> {
+  const discovery = await discover();
+  if (discovery.savedPlans) return discovery.savedPlans;
+  if (!discovery.parentId) throw new NotionConfigError("Set NOTION_SAVED_PLANS_DB to save plans.");
+  const created = await notion<{ id: string }>("/databases", {
+    method: "POST",
+    body: {
+      parent: { type: "page_id", page_id: discovery.parentId },
+      title: [{ type: "text", text: { content: SAVED_PLANS_TITLE } }],
+      properties: { Name: { title: {} }, Plan: { rich_text: {} }, Archived: { checkbox: {} } },
+    },
+  });
+  discoveryCache = null;
+  return created.id;
+}
+
+/** Saves the current workouts (exercises, targets, rest and names) as a plan to come back to. */
+export async function saveCurrentAsPlan(name: string): Promise<string> {
+  const dbs = await requireDbs();
+  const [programmes, slotPages] = await Promise.all([activeProgrammes(dbs), activeSlots(dbs)]);
+  if (!programmes.length) throw new TrainingSetupError("programme");
+  const slots = slotPages.map(toSlot).filter((slot): slot is Slot => slot !== null);
+  if (!slots.length) throw new InputError("There are no exercises to save yet");
+
+  const workouts = snapshotWorkouts(slots, toProgramme(programmes[0]).workoutNames);
+  const database = await ensureSavedPlansDb();
+  const page = await notion<{ id: string }>("/pages", {
+    method: "POST",
+    body: {
+      parent: { database_id: database },
+      properties: { Name: title(name), Plan: longText(serializeWorkouts(workouts)), Archived: { checkbox: false } },
+    },
+  });
+  return page.id;
+}
+
+/** Hides a saved plan (Archived), never deletes it. Only rows of Saved Plans can be touched. */
+export async function removeSavedPlan(id: string): Promise<void> {
+  const plans = await loadSavedPlans();
+  if (!plans.some((plan) => normalizeId(plan.id) === normalizeId(id))) throw new InputError("That plan doesn't exist");
+  await notion(`/pages/${id}`, { method: "PATCH", body: { properties: { Archived: { checkbox: true } } } });
+}
+
+/** Names for the workouts; an empty name removes it. */
+export async function renameWorkouts(names: Partial<Record<WorkoutKey, string>>): Promise<void> {
+  const dbs = await requireDbs();
+  await ensureProgrammeColumns(dbs);
+  const programmes = await activeProgrammes(dbs);
+  if (!programmes.length) throw new TrainingSetupError("programme");
+  const merged = { ...toProgramme(programmes[0]).workoutNames, ...names };
+  await notion(`/pages/${programmes[0].id}`, {
+    method: "PATCH",
+    body: { properties: { "Workout Names": text(formatWorkoutNames(merged)) } },
+  });
+}
+
+/**
+ * Switches to another plan. The current exercises are archived (kept, with
+ * their history), the plan's exercises are added, and any weight you've
+ * already worked out for an exercise carries over. The rotation starts again
+ * from the plan's first workout.
+ */
+export async function applyPlan(input: ApplyPlanInput): Promise<void> {
+  const dbs = await requireDbs();
+  await ensureProgrammeColumns(dbs);
+  const programmes = await activeProgrammes(dbs);
+  if (!programmes.length) throw new TrainingSetupError("programme");
+  const programme = toProgramme(programmes[0]);
+
+  let plan: { name: string; workouts: PlanWorkout[] };
+  if (input.plan.kind === "builtin") {
+    const found = getPlan(input.plan.id);
+    if (!found) throw new InputError("Unknown plan");
+    plan = found;
+  } else {
+    const saved = (await loadSavedPlans()).find((candidate) => normalizeId(candidate.id) === normalizeId(input.plan.id));
+    if (!saved) throw new InputError("That saved plan no longer exists");
+    plan = saved;
+  }
+
+  const seeds = seedsForPlan(plan, programme.equipment);
+  if (!seeds.length) throw new InputError("None of this plan's exercises work with your equipment");
+
+  if (input.saveCurrentAs) await saveCurrentAsPlan(input.saveCurrentAs);
+
+  // The weight already worked out for each exercise: the current one first, then the latest removed one.
+  const pages = (await queryAll(dbs.exercises, {})) as Page[];
+  const ranked = [...pages].sort(
+    (a, b) =>
+      Number(readCheckbox(a, "Archived")) - Number(readCheckbox(b, "Archived")) ||
+      String(b.last_edited_time ?? "").localeCompare(String(a.last_edited_time ?? "")),
+  );
+  const known = new Map<string, number>();
+  for (const page of ranked) {
+    const exerciseId = readText(page, "Exercise ID");
+    const weight = readNumber(page, "Weight (kg)");
+    if (exerciseId && weight !== null && !known.has(exerciseId)) known.set(exerciseId, weight);
+  }
+
+  const active = pages.filter((page) => !readCheckbox(page, "Archived"));
+  await inBatches(active, 3, (page) =>
+    notion(`/pages/${page.id}`, { method: "PATCH", body: { properties: { Archived: { checkbox: true } } } }),
+  );
+
+  await inBatches(seeds, 3, (seed) => {
+    const weight = known.get(seed.exerciseId);
+    // A plan that starts a move with a dumbbell doesn't drop back to bodyweight.
+    const carried = weight === undefined || (weight === 0 && seed.weight === null) ? seed : { ...seed, weight };
+    return notion("/pages", {
+      method: "POST",
+      body: { parent: { database_id: dbs.exercises }, properties: slotProperties(carried) },
+    });
+  });
+
+  const names = Object.fromEntries(plan.workouts.flatMap((workout) => (workout.name ? [[workout.key, workout.name]] : [])));
+  const properties: Record<string, unknown> = {
+    Name: title(plan.name),
+    "Workout Names": text(formatWorkoutNames(names)),
+  };
+  if (input.days) {
+    properties["Training Days"] = { multi_select: input.days.trainingDays.map((name) => ({ name })) };
+    properties["Back Care Days"] = { multi_select: input.days.backCareDays.map((name) => ({ name })) };
+  }
+  const updated = await notion<{ last_edited_time?: string }>(`/pages/${programmes[0].id}`, {
+    method: "PATCH",
+    body: { properties },
+  });
+  // The switch is timed by Notion's own clock, the same one that stamps logged workouts,
+  // so "workouts since the switch" never depends on two clocks agreeing.
+  await notion(`/pages/${programmes[0].id}`, {
+    method: "PATCH",
+    body: { properties: { "Plan Since": text(updated.last_edited_time ?? new Date().toISOString()) } },
+  });
 }
