@@ -8,6 +8,12 @@
   --color-prep: #f5a524;
   --color-work: #2ee66b;
   --color-rest: #38a8f5;
+  /* Chart marks: steps of the app's green and blue that pass the dark-surface
+     lightness, chroma, colour-blind and contrast checks for data marks. */
+  --color-chart-1: #1fa857;
+  --color-chart-2: #3987e5;
+  --color-grid: #1f2330;
+  --color-axis: #2a2f3f;
 }
 
 :root {

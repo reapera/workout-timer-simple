@@ -15,10 +15,11 @@ import {
   type NotionPage,
 } from "../notion";
 import { DEFAULT_EQUIPMENT, formatPlates, ladderFor, parsePlates } from "./equipment";
-import { getExercise } from "./exercises";
+import { EXERCISES, getExercise } from "./exercises";
 import { formatKg, formatValues } from "./format";
 import { decide, workingSets, type Decision, type Outcome } from "./progression";
 import { BACK_CARE } from "./routines";
+import { addDays, DELOAD_DAYS, inDeload } from "./schedule";
 import { buildSlots, canonicalExercise, substitute, type SlotSeed } from "./template";
 import {
   DAYS,
@@ -26,14 +27,17 @@ import {
   type DayName,
   type Effort,
   type ExerciseLog,
+  type History,
   type LastResult,
+  type LiftEntry,
   type Programme,
   type SessionLog,
   type SessionMark,
   type Slot,
   type TrainingData,
+  type WeightEntry,
 } from "./types";
-import type { ProgrammeInput } from "./validate";
+import type { BodyWeightInput, ProgrammeInput, ReviewInput } from "./validate";
 
 /**
  * Notion storage for the training programme: three databases that sit next
@@ -85,6 +89,9 @@ export const SCHEMAS: DatabaseSchema[] = [
       Bench: { type: "checkbox" },
       Level: { type: "select", options: ["Beginner", "Intermediate"] },
       "Back Pain": { type: "checkbox" },
+      "Deload Until": { type: "date" },
+      "Last Review": { type: "number" },
+      "Reminder Time": { type: "rich_text" },
     },
   },
   {
@@ -196,7 +203,9 @@ function definition(def: DatabaseSchema["properties"][string]) {
  * Finding (and creating) the databases
  * ------------------------------------------------------------------ */
 
-type Discovery = { parentId: string | null; found: Partial<Dbs> };
+type Discovery = { parentId: string | null; found: Partial<Dbs>; weightLog: string | null };
+
+const WEIGHT_LOG_TITLE = "weight log";
 
 let discoveryCache: { at: number; value: Discovery } | null = null;
 const DISCOVERY_TTL_MS = 10 * 60 * 1000;
@@ -217,7 +226,8 @@ function overrides(): Partial<Dbs> {
  */
 async function discover(fresh = false): Promise<Discovery> {
   const found = overrides();
-  if (SCHEMAS.every((schema) => found[schema.key])) return { parentId: null, found };
+  let weightLog = process.env.NOTION_WEIGHT_LOG_DB || null;
+  if (SCHEMAS.every((schema) => found[schema.key]) && weightLog) return { parentId: null, found, weightLog };
   if (!fresh && discoveryCache && Date.now() - discoveryCache.at < DISCOVERY_TTL_MS) {
     return discoveryCache.value;
   }
@@ -247,11 +257,12 @@ async function discover(fresh = false): Promise<Discovery> {
       const name = (block.child_database?.title ?? "").trim().toLowerCase();
       const schema = SCHEMAS.find((candidate) => candidate.title.toLowerCase() === name);
       if (schema && !found[schema.key]) found[schema.key] = block.id;
+      if (name === WEIGHT_LOG_TITLE && !weightLog) weightLog = block.id;
     }
     cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
   } while (cursor);
 
-  const value = { parentId, found };
+  const value = { parentId, found, weightLog };
   // Only a complete answer is worth remembering; a partial one is about to change.
   discoveryCache = SCHEMAS.every((schema) => found[schema.key]) ? { at: Date.now(), value } : null;
   return value;
@@ -260,6 +271,7 @@ async function discover(fresh = false): Promise<Discovery> {
 /** Drops remembered database ids, e.g. after one was moved or deleted in Notion. */
 export function forgetDatabases(): void {
   discoveryCache = null;
+  programmeColumnsChecked = false;
 }
 
 function missingTitles(found: Partial<Dbs>): string[] {
@@ -300,6 +312,18 @@ async function addMissingColumns(databaseId: string, schema: DatabaseSchema): Pr
   if (Object.keys(additions).length) {
     await notion(`/databases/${databaseId}`, { method: "PATCH", body: { properties: additions } });
   }
+}
+
+let programmeColumnsChecked = false;
+
+/**
+ * Plans created before a column was added to the schema gain it on their next
+ * write. Checked once per server instance.
+ */
+async function ensureProgrammeColumns(dbs: Dbs): Promise<void> {
+  if (programmeColumnsChecked) return;
+  await addMissingColumns(dbs.programme, SCHEMAS.find((schema) => schema.key === "programme")!);
+  programmeColumnsChecked = true;
 }
 
 /** Creates whichever training databases don't exist yet, next to the Workout Log. */
@@ -357,7 +381,19 @@ function toProgramme(page: Page): Programme {
     },
     level: readSelect(page, "Level") === "Intermediate" ? "intermediate" : "beginner",
     backPain: readCheckbox(page, "Back Pain"),
+    deloadUntil: readDate(page, "Deload Until")?.slice(0, 10) ?? null,
+    lastReview: Math.max(0, Math.round(readNumber(page, "Last Review") ?? 0)),
+    reminderTime: parseTime(readText(page, "Reminder Time")),
   };
+}
+
+/** "18:30" → "18:30"; anything else → null. */
+function parseTime(value: string): string | null {
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours < 24 && minutes < 60 ? `${String(hours).padStart(2, "0")}:${match[2]}` : null;
 }
 
 function toSlot(page: Page): Slot | null {
@@ -420,6 +456,14 @@ export async function loadTraining(): Promise<TrainingResponse> {
   }
 }
 
+/** Just the active programme: all the calendar feed needs. */
+export async function loadProgramme(): Promise<Programme> {
+  const dbs = await requireDbs();
+  const programmes = await activeProgrammes(dbs);
+  if (!programmes.length) throw new TrainingSetupError("programme");
+  return toProgramme(programmes[0]);
+}
+
 async function readTraining(): Promise<TrainingResponse> {
   const { found } = await discover();
   const missing = missingTitles(found);
@@ -475,6 +519,7 @@ async function readTraining(): Promise<TrainingResponse> {
         date: day,
         weight: readNumber(row, "Weight (kg)") ?? 0,
         values: parseValues(readText(row, "Reps")),
+        note: readText(row, "Note") || undefined,
       };
     }
   }
@@ -515,6 +560,7 @@ function programmeProperties(input: ProgrammeInput) {
     Bench: { checkbox: equipment.bench },
     Level: select(input.level === "intermediate" ? "Intermediate" : "Beginner"),
     "Back Pain": { checkbox: input.backPain },
+    ...(input.reminderTime !== undefined ? { "Reminder Time": text(input.reminderTime ?? "") } : {}),
   };
 }
 
@@ -585,9 +631,11 @@ export async function createProgramme(input: ProgrammeInput): Promise<void> {
  */
 export async function updateProgramme(input: ProgrammeInput): Promise<void> {
   const dbs = await requireDbs();
+  await ensureProgrammeColumns(dbs);
   const [programmes, slotPages] = await Promise.all([activeProgrammes(dbs), activeSlots(dbs)]);
   if (!programmes.length) throw new TrainingSetupError("programme");
 
+  const before = toProgramme(programmes[0]).equipment;
   await notion(`/pages/${programmes[0].id}`, {
     method: "PATCH",
     body: { properties: programmeProperties(input) },
@@ -595,8 +643,12 @@ export async function updateProgramme(input: ProgrammeInput): Promise<void> {
 
   const swaps = slotPages.flatMap((page) => {
     const current = readText(page, "Exercise ID");
-    const wanted = substitute(canonicalExercise(current), input.equipment);
-    return current && wanted !== current ? [{ id: page.id, exerciseId: wanted }] : [];
+    const base = canonicalExercise(current);
+    // Only exercises that were there for the old equipment follow the new one. A variation
+    // chosen on purpose (a review's one-arm floor press, say) stays as it is.
+    if (!current || substitute(base, before) !== current) return [];
+    const wanted = substitute(base, input.equipment);
+    return wanted !== current ? [{ id: page.id, exerciseId: wanted }] : [];
   });
   await inBatches(swaps, 3, (swap) =>
     notion(`/pages/${swap.id}`, {
@@ -709,6 +761,7 @@ export async function recordSession(session: SessionLog): Promise<{ rows: number
   if (!programmes.length) throw new TrainingSetupError("programme");
 
   const programme = toProgramme(programmes[0]);
+  const deload = inDeload(programme, session.date);
   const slots = slotPages.map(toSlot).filter((slot): slot is Slot => slot !== null);
   const written = new Set(already.map((row) => readText(row, "Exercise ID")));
   let rows = 0;
@@ -723,7 +776,9 @@ export async function recordSession(session: SessionLog): Promise<{ rows: number
         slots.find((candidate) => candidate.exerciseId === log.exerciseId && candidate.workout === session.workout);
       const exercise = getExercise(log.exerciseId);
       const fresh = slot && slot.lastSession !== session.id;
-      const decision = fresh ? decide(slot, exercise, log, ladderFor(exercise, programme.equipment)) : null;
+      const decision = fresh
+        ? decide(slot, exercise, log, ladderFor(exercise, programme.equipment), { deload })
+        : null;
 
       if (!written.has(log.exerciseId)) {
         await notion("/pages", {
@@ -754,4 +809,134 @@ export async function recordSession(session: SessionLog): Promise<{ rows: number
 
   await writeSummary(session);
   return { rows, updates };
+}
+
+/* ------------------------------------------------------------------ *
+ * History, body weight and the 4-week review
+ * ------------------------------------------------------------------ */
+
+/** Every lift, every back care session, and body weight from the Weight Log. */
+export async function loadHistory(): Promise<History> {
+  const { found, weightLog } = await discover();
+  const missing = missingTitles(found);
+  if (missing.length) throw new TrainingSetupError("databases", missing);
+  const dbs = found as Dbs;
+
+  const [liftRows, backCareRows, weightRows] = await Promise.all([
+    queryAll(dbs.liftLog, {
+      sorts: [
+        { property: "Date", direction: "ascending" },
+        { timestamp: "created_time", direction: "ascending" },
+      ],
+    }) as Promise<Page[]>,
+    queryAll(env("NOTION_LOG_DB"), {
+      filter: { property: "Exercise", rich_text: { equals: BACK_CARE.name } },
+    }) as Promise<Page[]>,
+    // Body weight is a bonus: a missing or differently-shaped Weight Log never breaks the page.
+    weightLog
+      ? (queryAll(weightLog, { sorts: [{ property: "Date", direction: "ascending" }] }) as Promise<Page[]>).catch(
+          () => [] as Page[],
+        )
+      : Promise.resolve([] as Page[]),
+  ]);
+
+  const lifts = liftRows.flatMap((row): LiftEntry[] => {
+    const day = readDate(row, "Date")?.slice(0, 10);
+    const workout = readSelect(row, "Workout");
+    const exerciseId = readText(row, "Exercise ID");
+    if (!day || !exerciseId || (workout !== "A" && workout !== "B")) return [];
+    return [
+      {
+        date: day,
+        session: readText(row, "Session") || `${day}:${workout}`,
+        workout,
+        exerciseId,
+        weight: readNumber(row, "Weight (kg)") ?? 0,
+        values: parseValues(readText(row, "Reps")),
+        result: readSelect(row, "Result"),
+        back: readSelect(row, "Back"),
+        effort: readSelect(row, "Effort"),
+      },
+    ];
+  });
+
+  const backCare = [
+    ...new Set(backCareRows.flatMap((row) => readDate(row, "Date")?.slice(0, 10) ?? [])),
+  ].sort();
+
+  const bodyWeight = weightRows.flatMap((row): WeightEntry[] => {
+    const day = readDate(row, "Date")?.slice(0, 10);
+    const kg = readNumber(row, "Weight (kg)");
+    if (!day || kg === null || kg <= 0) return [];
+    const fat = Number.parseFloat(readText(row, "Body Fat %").replace(",", "."));
+    return [{ date: day, kg, bodyFat: Number.isFinite(fat) ? fat : null }];
+  });
+
+  return { lifts, backCare, bodyWeight, weightLog: Boolean(weightLog) };
+}
+
+/**
+ * Adds a row to the Weight Log in its own style ("2026-08-12" as the title).
+ * Always a new row: existing entries are never edited.
+ */
+export async function logBodyWeight(input: BodyWeightInput): Promise<void> {
+  const { weightLog } = await discover();
+  if (!weightLog) {
+    throw new NotionConfigError("No Weight Log database was found on the page with your Workout Log.");
+  }
+  await notion("/pages", {
+    method: "POST",
+    body: {
+      parent: { database_id: weightLog },
+      properties: {
+        Name: title(input.date),
+        Date: date(input.date),
+        "Weight (kg)": num(input.kg),
+        ...(input.bodyFat !== null ? { "Body Fat %": text(`${input.bodyFat}%`) } : {}),
+      },
+    },
+  });
+}
+
+/**
+ * Applies what was accepted in a 4-week review: a deload week, harder
+ * variations, a different schedule. The block is marked reviewed either way.
+ */
+export async function applyReview(input: ReviewInput): Promise<void> {
+  const dbs = await requireDbs();
+  await ensureProgrammeColumns(dbs);
+  const [programmes, slotPages] = await Promise.all([activeProgrammes(dbs), activeSlots(dbs)]);
+  if (!programmes.length) throw new TrainingSetupError("programme");
+  const programme = toProgramme(programmes[0]);
+
+  const properties: Record<string, unknown> = {
+    "Last Review": num(Math.max(programme.lastReview, input.block)),
+  };
+  if (input.deload) properties["Deload Until"] = date(addDays(input.today, DELOAD_DAYS - 1));
+  if (input.schedule) {
+    properties["Training Days"] = { multi_select: input.schedule.trainingDays.map((name) => ({ name })) };
+    properties["Back Care Days"] = { multi_select: input.schedule.backCareDays.map((name) => ({ name })) };
+  }
+  await notion(`/pages/${programmes[0].id}`, { method: "PATCH", body: { properties } });
+
+  const swaps = input.swaps.filter((swap) =>
+    slotPages.some((page) => normalizeId(page.id) === normalizeId(swap.slotId)),
+  );
+  await inBatches(swaps, 3, (swap) => {
+    const exercise = EXERCISES[swap.to];
+    const weight = exercise.load === "none" || exercise.bodyweightStart ? 0 : null;
+    return notion(`/pages/${swap.slotId}`, {
+      method: "PATCH",
+      body: {
+        properties: {
+          Name: title(exercise.name),
+          "Exercise ID": text(exercise.id),
+          // A new movement starts by finding its weight again.
+          "Weight (kg)": num(weight),
+          Stretch: num(0),
+          Stalls: num(0),
+        },
+      },
+    });
+  });
 }

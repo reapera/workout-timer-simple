@@ -17,6 +17,7 @@ export const IDS = {
   workoutLog: "3570c782-4a59-8141-8842-fce74812fd2e",
   routines: "71118190-7086-43f5-80b1-a13fdb3840fd",
   routineExercises: "a5288f02-c641-439f-8bc6-b4a82b504504",
+  weightLog: "3570c782-4a59-8139-8000-d8b360d6064a",
 };
 
 const strip = (id) => String(id).replace(/-/g, "").toLowerCase();
@@ -336,6 +337,18 @@ export function createFakeNotion({ seed = true } = {}) {
         Level: { rich_text: {} },
         Notes: { rich_text: {} },
         Reps: { number: {} },
+      },
+    });
+    addDatabase({
+      id: IDS.weightLog,
+      parentId: IDS.healthTracker,
+      title: "Weight Log",
+      properties: {
+        Name: { title: {} },
+        Date: { date: {} },
+        "Weight (kg)": { number: {} },
+        "Body Fat %": { rich_text: {} },
+        Note: { rich_text: {} },
       },
     });
     addDatabase({

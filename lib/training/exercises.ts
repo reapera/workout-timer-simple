@@ -328,6 +328,69 @@ const LIST: ExerciseDef[] = [
   },
 
   /* ---------------------------------------------------------------- *
+   * Harder variations, offered by the 4-week review once a lift tops out
+   * ---------------------------------------------------------------- */
+  {
+    id: "bulgarian-split-squat",
+    name: "Bulgarian split squat",
+    kind: "reps",
+    load: "single",
+    perSide: true,
+    bodyweightStart: true,
+    muscles: ["Thighs", "Glutes"],
+    images: photos("bulgarian-split-squat"),
+    imageNote: "The photo uses a barbell and a bench. At home, rest your back foot on a chair or sofa and hold one dumbbell at your chest.",
+    cues: [
+      "Stand a big step in front of a chair or sofa and rest the top of your back foot on it.",
+      "Hold the dumbbell upright against your chest (or start with no weight).",
+      "Lower straight down until your front thigh is about level, then push through your front heel to stand.",
+      "Finish all reps on one leg, then switch.",
+    ],
+    mistakes: ["Standing too close to the chair, so the front knee shoots forward.", "Leaning forward to get lower."],
+    back: "Stay tall with your stomach braced; the back leg only helps you balance. Hold a wall if you wobble.",
+    video: "bulgarian split squat dumbbell form",
+  },
+  {
+    id: "single-leg-rdl",
+    name: "Single-leg Romanian deadlift",
+    kind: "reps",
+    load: "single",
+    perSide: true,
+    startGuess: 6,
+    muscles: ["Hamstrings", "Glutes", "Lower back", "Balance"],
+    images: photos("single-leg-rdl"),
+    imageNote: "The photo uses a kettlebell. A dumbbell works the same — hold it in the hand opposite the standing leg.",
+    cues: [
+      "Stand on one leg with a slight bend in the knee, dumbbell in the opposite hand.",
+      "Hinge at the hip, letting the free leg swing back in line with your body.",
+      "Lower until you feel a stretch in the back of the standing leg, back flat, hips level.",
+      "Squeeze the glute of the standing leg to come up. Finish all reps, then switch.",
+    ],
+    mistakes: ["Opening the hip so the back leg rotates outward.", "Rounding your back to reach lower."],
+    back: "Keep it slow and light at first — balance is part of the exercise. Touch a wall with your free hand if needed.",
+    video: "single leg romanian deadlift dumbbell form",
+  },
+  {
+    id: "single-leg-glute-bridge",
+    name: "Single-leg glute bridge",
+    kind: "reps",
+    load: "single",
+    perSide: true,
+    bodyweightStart: true,
+    muscles: ["Glutes", "Hamstrings", "Lower back"],
+    images: photos("single-leg-glute-bridge"),
+    cues: [
+      "Lie on your back with one foot flat and the other leg straight up or held in the air.",
+      "Push through the heel of the planted foot and lift your hips until they're level.",
+      "Hold for a second, lower slowly. Finish all reps, then switch legs.",
+      "Once that's easy, rest a dumbbell across your hips.",
+    ],
+    mistakes: ["Hips tipping toward the lifted leg.", "Arching your lower back instead of squeezing your glute."],
+    back: "Keep your ribs down and your hips level — it's your glutes doing the work, not your back.",
+    video: "single leg glute bridge form",
+  },
+
+  /* ---------------------------------------------------------------- *
    * Warm-up and back care
    * ---------------------------------------------------------------- */
   {
@@ -446,6 +509,20 @@ export const EXERCISES: Record<string, ExerciseDef> = Object.fromEntries(
 );
 
 export const EXERCISE_LIST: readonly ExerciseDef[] = LIST;
+
+/**
+ * Where to go once a lift has topped out on your dumbbells: a variation that
+ * makes the same weight much harder (one leg, one arm).
+ */
+export const HARDER: Readonly<Record<string, string>> = {
+  "goblet-squat": "bulgarian-split-squat",
+  "split-squat": "bulgarian-split-squat",
+  "split-squat-goblet": "bulgarian-split-squat",
+  "romanian-deadlift": "single-leg-rdl",
+  "romanian-deadlift-single": "single-leg-rdl",
+  "glute-bridge": "single-leg-glute-bridge",
+  "floor-press": "floor-press-one-arm",
+};
 
 /** Unknown ids (renamed in Notion, typo) degrade to a plain bodyweight entry. */
 export function getExercise(id: string): ExerciseDef {

@@ -30,3 +30,9 @@ export function perSideWord(exercise: Pick<ExerciseDef, "id">): string {
 export function formatValues(kind: ExerciseDef["kind"], values: number[]): string {
   return values.map((value) => (kind === "timed" ? `${value} s` : String(value))).join(", ");
 }
+
+/** "Oct 4" for a local yyyy-mm-dd date, in the phone's language. */
+export function shortDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}

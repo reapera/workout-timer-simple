@@ -7,6 +7,10 @@ exercise, weight and rep target listed and a START button. On other days it's a 
 session or a rest day. You follow along set by set, log reps with big +/− buttons, and the app
 works out next session's weights. Everything is stored in your Notion **Health Tracker**.
 
+**Progress** charts every lift and your body weight. Every four weeks a **review** looks back
+and suggests changes, such as a lighter week or a harder exercise. Reminders go to your phone's
+calendar, and the app installs to your home screen and opens without signal.
+
 ## The programme
 
 Built for a beginner training at home with adjustable dumbbells, aiming at general fitness, with a
@@ -55,6 +59,56 @@ Double progression: earn the reps, then the weight.
 
 The rules live in `lib/training/progression.ts`. The phone and the server use the same code, so
 the summary screen shows exactly what Notion will record.
+
+Before the first set of each exercise, the workout shows what you did last time and any note you
+left yourself, e.g. *"Hamstrings, not back. Keep the dumbbells close."*
+
+## Progress
+
+**Progress** (top of Today) is built from the Lift Log, so it includes everything you've ever
+logged:
+
+- **Totals:** workouts done, workouts in the last 4 weeks against plan, weeks on track in a row,
+  and total kg lifted.
+- **Calendar:** each day since you started (up to 8 weeks), showing what was planned and what
+  you did.
+- **Your lifts:** best set and gain for each exercise. Tap one for its chart: working weight
+  for dumbbell lifts, best set for bodyweight moves, longest hold for planks. Use arrow keys or
+  touch to read each session, or **Show as table**.
+- **Weight lifted per week:** weight × reps, both dumbbells counted.
+- **Body weight:** read from, and added to, your existing **Weight Log**.
+
+## Every 4 weeks: a review
+
+When a 4-week block ends, Today shows **Your 4-week review is ready**. The review lists workouts
+done against plan, and each lift's sessions, weight change, steps up and down, and back-pain
+flags. It then suggests changes:
+
+- **Take a lighter week**: when your back reported pain twice or more, or lifts went backwards
+  twice or more. Otherwise it's suggested every 8 weeks, but never within 4 weeks of the last
+  one.
+- **Make an exercise harder**: when a lift has topped out what your dumbbells can make, even with
+  extra reps:
+  - goblet squat or split squat → Bulgarian split squat
+  - Romanian deadlift → single-leg RDL
+  - glute bridge → single-leg glute bridge
+  - floor press → one-arm floor press
+
+  The new exercise starts by finding its weight again.
+- **Switch to 2 strength days** (Mon/Thu, back care Tue/Sat): when fewer than half the planned
+  workouts happened. Never after an empty block, which is more likely illness or travel than a
+  bad fit.
+
+Suggestions start ticked, so following the plan takes one tap. Nothing changes until you press
+the button. A block with nothing to suggest still gets the summary, and the lighter week can be
+taken anyway.
+
+### Lighter weeks
+
+For 7 days, every lift has one set fewer and is about 10% lighter. If the next weight down is a
+much bigger drop (e.g. 4.5 kg → the 2 kg empty handle), you keep the weight and just do fewer
+sets. Weights don't change after these sessions. A lift still finding its first weight works as
+usual.
 
 ## Your dumbbells
 
@@ -107,7 +161,8 @@ and says which.
 
 **Training Programme**: one row, your plan. `Start Date`, `Training Days`, `Back Care Days`,
 `Handles`, `Handle Weight (kg)`, `Plates` (e.g. `1.25×4, 1.5×4, 2×4`), `Plates Per Side`,
-`Bench`, `Level`, `Back Pain`, `Active`.
+`Bench`, `Level`, `Back Pain`, `Active`, `Deload Until`, `Last Review`, `Reminder Time`. The last
+three are added to an existing database automatically the first time they're needed.
 
 **Programme Exercises**: one row per exercise in Workout A or B, holding its current target.
 `Exercise ID`, `Workout`, `Order`, `Sets`, `Rep Min`, `Rep Max`, `Seconds`, `Max Seconds`,
@@ -135,6 +190,11 @@ entries:
 Timed sessions (the spoken timer, and back care) keep writing their single row as before:
 `Duration (s)` holds the work seconds, and `Reps` and `Level` stay empty.
 
+**Weight Log** (existing, next to the Workout Log) feeds the body weight chart. Saving a weight
+on Progress adds a row: `Name` and `Date` are the day, `Weight (kg)` the weight, and `Body Fat %`
+is filled in if you enter it. The app finds the database by name. Set `NOTION_WEIGHT_LOG_DB` to
+point it elsewhere.
+
 ## Passcode lock
 
 By default anyone with the app's URL can use it, including reading and changing your Notion data
@@ -144,6 +204,35 @@ device:
 - Pick something longer than a 4-digit PIN; each wrong guess is slowed down.
 - The phone stays unlocked through an `HttpOnly` cookie.
 - Changing the passcode, or `APP_SECRET`, signs every device out.
+- The calendar feed is the one exception: calendar apps can't enter a passcode. Its link carries
+  its own secret token, and only someone already unlocked can see it.
+- The install files (manifest, icons, service worker) are public too. They contain no data.
+
+## Reminders
+
+**Plan settings → Reminders** sets a time (18:00 until you pick one) and gives you a calendar
+link. Your phone's calendar then shows every strength and back care day, with an alert at that
+time. Lighter weeks and the next review appear as all-day events. Calendar apps re-check the link
+on their own (Apple's every few hours, Google's up to a day), so changing your days or time in
+the app, or in a review, reaches the calendar by itself.
+
+- **iPhone:** tap **Subscribe**, then **Subscribe** again. Keep "Remove alerts" off.
+- **Google Calendar:** tap **Copy link**. Then, on a computer, go to calendar.google.com and
+  choose **Other calendars → + → From URL**. Google ignores the feed's own alerts, so set a
+  default notification in that calendar's settings.
+- **One-off import:** **Download the calendar file** adds the repeating events once. They keep
+  their alerts but won't follow later changes.
+
+Anyone with the link can see your schedule and the app's address, nothing else. If a link gets
+out, change `APP_SECRET`; every old link stops working.
+
+## Install it on your phone
+
+- **iPhone (Safari):** Share → **Add to Home Screen**.
+- **Android (Chrome):** ⋮ → **Install app**, or **Add to Home screen**.
+
+It opens full screen like an app, with its own icon, and shortcuts to Progress and the timer on
+Android (long-press the icon).
 
 ## The spoken timer
 
@@ -206,11 +295,14 @@ npm run typecheck
 The tests cover:
 
 - the plate maths
-- every progression rule
+- every progression rule, including lighter weeks
 - the schedule and rotation
 - the workout state machine
+- progress read-outs and the 4-week review
+- the calendar feed: format, line folding, and the secret link
 - the passcode gate
-- the Notion layer, run against the fake, including retried uploads
+- the Notion layer, run against the fake, including retried uploads, history, body weight and
+  reviews
 
 ## Deploying to Vercel
 
@@ -220,8 +312,10 @@ npx vercel
 
 Then add the environment variables from `.env.local` in **Project → Settings →
 Environment Variables** (Production, Preview and Development), and redeploy. That means the four
-Notion ones, plus `APP_PASSCODE` if you want the lock. `.env.local` is git-ignored and is never
-uploaded, so this step is required even after a successful local run.
+Notion ones, plus `APP_PASSCODE` if you want the lock. Also set `APP_SECRET` to a long random
+string: it signs the unlock cookie and the calendar link. Without it the Notion token is used,
+and the calendar link could then only be revoked by changing the token. `.env.local` is
+git-ignored and is never uploaded, so this step is required even after a successful local run.
 
 ## Offline behaviour
 
@@ -235,8 +329,13 @@ phone keeps working copies:
 - A finished workout that can't reach Notion is queued and uploaded the next time the app opens.
   Its new weights show straight away. The upload is safe to repeat: rows already written are
   skipped, so nothing is written twice.
+- Progress keeps the last synced history, so the charts still open offline.
+- Once installed (or after one visit in a production build), a service worker keeps the app
+  itself on the phone. Pages you've opened before open with no signal. Pages you haven't say
+  so and link back to Today.
 
-Editing routines and plan settings still requires a connection.
+Editing routines and plan settings, saving body weight and applying a review still require a
+connection.
 
 ## Layout
 
@@ -244,12 +343,16 @@ Editing routines and plan settings still requires a connection.
 | --- | --- |
 | `app/page.tsx` | Today: the day's workout, back care or rest, and the week |
 | `app/workout/` | The workout in progress |
-| `app/setup/` | First-time setup and plan settings |
+| `app/progress/` | Charts, the consistency calendar and body weight |
+| `app/review/` | The 4-week review |
+| `app/setup/` | First-time setup, plan settings and reminders |
 | `app/exercises/` | Exercise guides: photos, steps, mistakes, back advice, demo video link |
 | `app/timer/`, `app/routines/` | The spoken interval timer and its routines |
 | `app/api/` | Server routes; the Notion token never reaches the browser |
+| `app/api/calendar/` | The calendar feed and its link |
+| `app/manifest.ts`, `public/sw.js`, `public/icons/` | Install to home screen and offline start-up |
 | `proxy.ts`, `app/unlock/` | Optional passcode lock |
-| `lib/training/` | Exercise library, plate maths, progression, schedule, workout state, Notion storage |
+| `lib/training/` | Exercise library, plate maths, progression, schedule, workout state, progress, reviews, calendar feed, Notion storage |
 | `lib/useTimer.ts` | Interval engine |
 | `lib/notion.ts` | Notion REST client and timer routines |
 | `lib/audio.ts` | Speech and beeps |

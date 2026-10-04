@@ -14,11 +14,11 @@ import {
   type UploadResult,
 } from "@/lib/training/client";
 import { ladderFor, loadingFor, trimNumber } from "@/lib/training/equipment";
-import { getExercise } from "@/lib/training/exercises";
-import { formatKg, formatPlates, formatValues, perSideWord } from "@/lib/training/format";
+import { getExercise, type ExerciseDef } from "@/lib/training/exercises";
+import { formatKg, formatPlates, formatValues, perSideWord, shortDate } from "@/lib/training/format";
 import type { Outcome } from "@/lib/training/progression";
 import { WARM_UP, WARM_UP_ROUTINE } from "@/lib/training/routines";
-import type { BackFeel, Effort } from "@/lib/training/types";
+import type { BackFeel, Effort, LastResult } from "@/lib/training/types";
 import {
   aimFor,
   outcomes,
@@ -170,7 +170,10 @@ function WorkoutHeader({ state, onEnd }: { state: WorkoutState; onEnd: () => voi
     <header className="pb-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white/60">Workout {state.workout}</p>
+          <p className="truncate text-sm font-medium text-white/60">
+            Workout {state.workout}
+            {state.deload && <span className="text-[var(--color-rest)]"> · Lighter week</span>}
+          </p>
           <p className="text-xs text-white/35">
             {state.phase === "warmup"
               ? "Warm-up"
@@ -318,6 +321,8 @@ function SetView({
         </button>
       </div>
 
+      {exercise.last && exercise.sets.length === 0 && <LastTime last={exercise.last} definition={definition} />}
+
       {state.backCheck && definition.back && (
         <button
           onClick={() => setShowBackTip((open) => !open)}
@@ -387,6 +392,22 @@ function SetView({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LastTime({ last, definition }: { last: LastResult; definition: ExerciseDef }) {
+  const weight = definition.load !== "none" && last.weight > 0 ? `${formatKg(last.weight)} × ` : "";
+  return (
+    <div className="mt-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-xs text-white/50">
+      <p>
+        Last time, {shortDate(last.date)}:{" "}
+        <span className="font-medium text-white/80">
+          {weight}
+          {formatValues(definition.kind, last.values)}
+        </span>
+      </p>
+      {last.note && <p className="mt-1 text-white/70">Your note: &ldquo;{last.note}&rdquo;</p>}
     </div>
   );
 }

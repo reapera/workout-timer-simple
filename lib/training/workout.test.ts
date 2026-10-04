@@ -9,6 +9,7 @@ import {
   applyWorkout,
   createWorkout,
   outcomes,
+  plannedLoad,
   reduce,
   toSessionLog,
   totals,
@@ -26,6 +27,9 @@ function data(overrides: Partial<TrainingData> = {}): TrainingData {
       equipment: DEFAULT_EQUIPMENT,
       level: "beginner",
       backPain: true,
+      deloadUntil: null,
+      lastReview: 0,
+      reminderTime: null,
     },
     slots: buildSlots(DEFAULT_EQUIPMENT).map((seed, index) => ({
       ...seed,
@@ -221,5 +225,51 @@ describe("after the workout", () => {
     expect(moved.slots[0].weight).toBe(7);
     expect(outcomes(state)[0].decision?.next.weight).toBe(7);
     expect(state.exercises[0].slot.weight).toBeNull();
+  });
+});
+
+describe("deload weeks", () => {
+  const deloading = () => {
+    const source = data({ programme: { ...data().programme, deloadUntil: "2026-10-04" } });
+    source.slots[0] = { ...source.slots[0], weight: 8 };
+    return source;
+  };
+
+  it("drops a set and about 10% of the weight", () => {
+    const state = start(deloading(), 3);
+    expect(state.deload).toBe(true);
+    expect(state.exercises[0]).toMatchObject({ weight: 7, plannedSets: 2 });
+    // A lift still finding its weight starts from the usual guess.
+    expect(state.exercises[1]).toMatchObject({ finding: true, weight: 5 });
+    // Never below one set.
+    expect(start(deloading(), 1).exercises[3].plannedSets).toBe(1);
+  });
+
+  it("keeps the weight when the next one down is a much bigger drop", () => {
+    // One dumbbell: 4.5 kg, then nothing lighter but the 2 kg empty handle.
+    const source = deloading();
+    source.slots[0] = { ...source.slots[0], weight: 4.5 };
+    expect(plannedLoad(source.slots[0], source.programme, 3, true)).toEqual({ sets: 2, weight: 4.5, finding: false });
+    expect(plannedLoad(source.slots[0], source.programme, 3, false)).toEqual({ sets: 3, weight: 4.5, finding: false });
+  });
+
+  it("leaves the plan unchanged afterwards", () => {
+    const source = deloading();
+    let state = reduce(start(source, 3), { type: "warmup-done" });
+    state = reduce(state, { type: "log-set", value: 15, now: T0 });
+    state = reduce(state, { type: "rest-done" });
+    state = reduce(state, { type: "log-set", value: 15, now: T0 });
+    state = reduce(state, { type: "rate", effort: "easy", back: "none", now: T0 });
+    state = reduce(state, { type: "finish", now: T0 });
+    expect(outcomes(state)[0].decision?.outcome).toBe("hold");
+    expect(applyWorkout(source, state).slots[0].weight).toBe(8);
+  });
+
+  it("only covers the seven days ending on the deload date", () => {
+    const source = deloading();
+    const after = createWorkout({ data: source, workout: "A", date: "2026-10-05", week: 2, id: "s2", now: T0 });
+    expect(after.deload).toBe(false);
+    const before = createWorkout({ data: source, workout: "A", date: "2026-09-27", week: 1, id: "s3", now: T0 });
+    expect(before.deload).toBe(false);
   });
 });

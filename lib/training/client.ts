@@ -1,13 +1,14 @@
 "use client";
 
 import { readError, readJson, writeJson, type ApiFailure } from "../client";
-import type { TrainingData, SessionLog } from "./types";
-import type { ProgrammeInput } from "./validate";
+import type { History, SessionLog, TrainingData } from "./types";
+import type { BodyWeightInput, ProgrammeInput, ReviewInput } from "./validate";
 import { applySession, applyWorkout, toSessionLog, type WorkoutState } from "./workout";
 
 const DATA_KEY = "wt.training.v1";
 const ACTIVE_KEY = "wt.activeWorkout.v1";
 const QUEUE_KEY = "wt.pendingWorkouts.v1";
+const HISTORY_KEY = "wt.history.v1";
 
 /** An unfinished workout older than this is stale, not something to resume. */
 const RESUME_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -145,4 +146,37 @@ export async function flushPendingWorkouts(): Promise<number> {
   }
   if (sent) writeJson(QUEUE_KEY, queue);
   return sent;
+}
+
+/* ------------------------------------------------------------------ *
+ * History, body weight and reviews
+ * ------------------------------------------------------------------ */
+
+export type HistoryLoad =
+  | { kind: "ready"; history: History; stale: boolean }
+  | { kind: "error"; failure: ApiFailure };
+
+/** The full history for the Progress page; the last good copy when offline. */
+export async function fetchHistory(): Promise<HistoryLoad> {
+  const fallback = (failure: ApiFailure): HistoryLoad => {
+    const cached = readJson<History>(HISTORY_KEY);
+    return cached ? { kind: "ready", history: cached, stale: true } : { kind: "error", failure };
+  };
+  try {
+    const response = await fetch("/api/training/history", { cache: "no-store" });
+    if (!response.ok) return fallback(await readError(response));
+    const history = (await response.json()) as History;
+    writeJson(HISTORY_KEY, history);
+    return { kind: "ready", history, stale: false };
+  } catch {
+    return fallback({ message: "You appear to be offline.", kind: "unknown" });
+  }
+}
+
+export function logBodyWeight(input: BodyWeightInput): Promise<void> {
+  return send("/api/training/body-weight", "POST", input);
+}
+
+export function saveReview(input: ReviewInput): Promise<void> {
+  return send("/api/training/review", "POST", input);
 }

@@ -1,6 +1,7 @@
-import { ladderFor, snapDown, snapNearest } from "./equipment";
+import { ladderFor, snapDown, snapNearest, stepDown } from "./equipment";
 import { getExercise } from "./exercises";
-import { decide, workingSets, type Decision } from "./progression";
+import { BACK_OFF, decide, MAX_DELOAD_DROP, workingSets, type Decision } from "./progression";
+import { inDeload } from "./schedule";
 import { setsForWeek, slotsFor } from "./template";
 import type {
   BackFeel,
@@ -56,6 +57,8 @@ export type WorkoutState = {
   finishedAt: number | null;
   backCheck: boolean;
   equipment: Equipment;
+  /** A lighter week: one set fewer, ~10% less weight, and no progression. */
+  deload?: boolean;
   phase: Phase;
   index: number;
   /** When the current rest ends (epoch ms). */
@@ -77,6 +80,33 @@ export type Action =
   | { type: "finish"; now: number }
   | { type: "submitted"; now: number };
 
+/**
+ * Sets and kg per dumbbell for a slot, as a workout would start it: the
+ * nearest weight the dumbbells can make, a first guess when finding the
+ * weight, and one set fewer and ~10% lighter in a deload week (the same
+ * weight when the next one down is a much bigger drop).
+ */
+export function plannedLoad(
+  slot: Slot,
+  programme: Pick<TrainingData["programme"], "equipment" | "level">,
+  week: number,
+  deload: boolean,
+): { sets: number; weight: number; finding: boolean } {
+  const exercise = getExercise(slot.exerciseId);
+  const ladder = ladderFor(exercise, programme.equipment);
+  const finding = slot.weight === null && exercise.load !== "none";
+  let weight = 0;
+  if (exercise.load !== "none") {
+    weight = finding ? snapDown(ladder, exercise.startGuess ?? ladder[0] ?? 0) : snapNearest(ladder, slot.weight ?? 0);
+    if (deload && !finding) {
+      const lighter = stepDown(ladder, weight, BACK_OFF);
+      if (lighter >= weight * (1 - MAX_DELOAD_DROP)) weight = lighter;
+    }
+  }
+  const sets = setsForWeek(slot.sets, week, programme.level);
+  return { sets: deload ? Math.max(1, sets - 1) : sets, weight, finding };
+}
+
 export function createWorkout(options: {
   data: TrainingData;
   workout: WorkoutKey;
@@ -86,22 +116,14 @@ export function createWorkout(options: {
   now: number;
 }): WorkoutState {
   const { data, workout } = options;
+  const deload = inDeload(data.programme, options.date);
   const exercises = slotsFor(data.slots, workout).map((slot): ActiveExercise => {
-    const exercise = getExercise(slot.exerciseId);
-    const ladder = ladderFor(exercise, data.programme.equipment);
-    const finding = slot.weight === null && exercise.load !== "none";
-    let weight = 0;
-    if (exercise.load !== "none") {
-      weight = finding
-        ? snapDown(ladder, exercise.startGuess ?? ladder[0] ?? 0)
-        : snapNearest(ladder, slot.weight ?? 0);
-    }
-
+    const { sets, weight, finding } = plannedLoad(slot, data.programme, options.week, deload);
     return {
       slotId: slot.id,
       slot,
       exerciseId: slot.exerciseId,
-      plannedSets: setsForWeek(slot.sets, options.week, data.programme.level),
+      plannedSets: sets,
       repMin: slot.repMin,
       repMax: slot.repMax === null ? null : slot.repMax + slot.stretch,
       seconds: slot.seconds,
@@ -127,6 +149,7 @@ export function createWorkout(options: {
     finishedAt: null,
     backCheck: data.programme.backPain,
     equipment: data.programme.equipment,
+    deload,
     phase: exercises.length ? "warmup" : "done",
     index: 0,
     restUntil: null,
@@ -257,7 +280,9 @@ export function outcomes(state: WorkoutState): ExerciseOutcome[] {
   return state.exercises.map((exercise, index) => {
     const definition = getExercise(exercise.exerciseId);
     if (!exercise.sets.length) return { exercise, decision: null };
-    const decision = decide(exercise.slot, definition, log.exercises[index], ladderFor(definition, state.equipment));
+    const decision = decide(exercise.slot, definition, log.exercises[index], ladderFor(definition, state.equipment), {
+      deload: state.deload,
+    });
     return { exercise, decision };
   });
 }
@@ -291,11 +316,12 @@ export function applySession(data: TrainingData, session: SessionLog): TrainingD
   const done = session.exercises.filter((log) => log.sets.length);
   if (!done.length) return data;
 
+  const deload = inDeload(data.programme, session.date);
   const slots = data.slots.map((slot) => {
     const log = done.find((candidate) => candidate.slotId === slot.id);
     if (!log) return slot;
     const exercise = getExercise(log.exerciseId);
-    const decision = decide(slot, exercise, log, ladderFor(exercise, data.programme.equipment));
+    const decision = decide(slot, exercise, log, ladderFor(exercise, data.programme.equipment), { deload });
     return { ...slot, ...decision.next, lastSession: session.id, lastDone: session.date };
   });
 
@@ -305,6 +331,7 @@ export function applySession(data: TrainingData, session: SessionLog): TrainingD
       date: session.date,
       weight: workingSets(log.sets).weight,
       values: log.sets.map((set) => set.value),
+      note: log.note || undefined,
     };
   }
 

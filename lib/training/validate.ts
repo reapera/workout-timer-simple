@@ -1,4 +1,5 @@
 import { DEFAULT_EQUIPMENT } from "./equipment";
+import { EXERCISES } from "./exercises";
 import { DAYS, type BackFeel, type DayName, type Effort, type Equipment, type ExerciseLog, type Level, type SessionLog } from "./types";
 
 /**
@@ -15,6 +16,8 @@ export type ProgrammeInput = {
   equipment: Equipment;
   level: Level;
   backPain: boolean;
+  /** "HH:MM", or null to clear; left out = unchanged. */
+  reminderTime?: string | null;
 };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -81,7 +84,15 @@ export function parseProgrammeInput(input: unknown): ProgrammeInput {
     equipment: parseEquipment(raw.equipment ?? {}),
     level: raw.level === "intermediate" ? "intermediate" : "beginner",
     backPain: raw.backPain === true,
+    ...(raw.reminderTime === undefined ? {} : { reminderTime: parseTime(raw.reminderTime) }),
   };
+}
+
+function parseTime(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) throw new InputError("Reminder time must be HH:MM");
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
 function parseExerciseLog(input: unknown): ExerciseLog {
@@ -138,4 +149,46 @@ export function parseSessionLog(input: unknown): SessionLog {
     elapsedSeconds: Math.round(number(raw.elapsedSeconds, 0, 6 * 3600, 0)),
     exercises,
   };
+}
+
+export type BodyWeightInput = { date: string; kg: number; bodyFat: number | null };
+
+export function parseBodyWeight(input: unknown): BodyWeightInput {
+  const raw = record(input, "a JSON object");
+  if (typeof raw.date !== "string" || !ISO_DATE.test(raw.date)) throw new InputError("date must be YYYY-MM-DD");
+  const kg = Number(raw.kg);
+  if (!Number.isFinite(kg) || kg < 20 || kg > 400) throw new InputError("Weight must be between 20 and 400 kg");
+  const fat = raw.bodyFat === null || raw.bodyFat === undefined || raw.bodyFat === "" ? null : Number(raw.bodyFat);
+  if (fat !== null && (!Number.isFinite(fat) || fat < 2 || fat > 70)) throw new InputError("Body fat must be between 2 and 70%");
+  return { date: raw.date, kg: Math.round(kg * 10) / 10, bodyFat: fat === null ? null : Math.round(fat * 10) / 10 };
+}
+
+export type ReviewInput = {
+  block: number;
+  today: string;
+  deload: boolean;
+  swaps: Array<{ slotId: string; to: string }>;
+  schedule?: { trainingDays: DayName[]; backCareDays: DayName[] };
+};
+
+export function parseReview(input: unknown): ReviewInput {
+  const raw = record(input, "a JSON object");
+  const block = Math.round(number(raw.block, 1, 520));
+  if (typeof raw.today !== "string" || !ISO_DATE.test(raw.today)) throw new InputError("today must be YYYY-MM-DD");
+  const swaps = (Array.isArray(raw.swaps) ? raw.swaps : []).slice(0, 10).map((item) => {
+    const swap = record(item, "a swap");
+    if (typeof swap.slotId !== "string" || !swap.slotId || swap.slotId.length > 64) throw new InputError("A swap needs a slotId");
+    if (typeof swap.to !== "string" || !(swap.to in EXERCISES)) throw new InputError("Unknown exercise to swap to");
+    return { slotId: swap.slotId, to: swap.to };
+  });
+
+  let schedule: ReviewInput["schedule"];
+  if (raw.schedule !== undefined && raw.schedule !== null) {
+    const value = record(raw.schedule, "a schedule");
+    const trainingDays = days(value.trainingDays);
+    if (!trainingDays.length) throw new InputError("Pick at least one training day");
+    schedule = { trainingDays, backCareDays: days(value.backCareDays).filter((day) => !trainingDays.includes(day)) };
+  }
+
+  return { block, today: raw.today, deload: raw.deload === true, swaps, schedule };
 }

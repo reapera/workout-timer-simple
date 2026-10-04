@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { cachedTraining, createPlan, fetchTraining, savePlan } from "@/lib/training/client";
 import { DEFAULT_EQUIPMENT, loadings, trimNumber } from "@/lib/training/equipment";
-import { DEFAULT_BACK_CARE_DAYS, DEFAULT_TRAINING_DAYS, localDate } from "@/lib/training/schedule";
+import { DEFAULT_BACK_CARE_DAYS, DEFAULT_REMINDER_TIME, DEFAULT_TRAINING_DAYS, localDate } from "@/lib/training/schedule";
 import { DAYS, type DayName, type Equipment } from "@/lib/training/types";
 import type { ProgrammeInput } from "@/lib/training/validate";
 
@@ -17,6 +17,7 @@ const DEFAULTS = (): ProgrammeInput => ({
   equipment: DEFAULT_EQUIPMENT,
   level: "beginner",
   backPain: true,
+  reminderTime: DEFAULT_REMINDER_TIME,
 });
 
 /** First-time setup and, once a plan exists, its settings. */
@@ -36,6 +37,7 @@ export function SetupForm() {
       equipment: plan.equipment,
       level: plan.level,
       backPain: plan.backPain,
+      reminderTime: plan.reminderTime ?? DEFAULT_REMINDER_TIME,
     });
 
     const cached = cachedTraining();
@@ -223,6 +225,24 @@ export function SetupForm() {
         </p>
       </Section>
 
+      <Section title="Reminders">
+        <Row label="Remind me at" hint="On training and back care days">
+          <input
+            type="time"
+            value={form.reminderTime ?? DEFAULT_REMINDER_TIME}
+            onChange={(event) => event.target.value && set({ reminderTime: event.target.value })}
+            className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-white [color-scheme:dark]"
+          />
+        </Row>
+        {editing ? (
+          <CalendarLinks />
+        ) : (
+          <p className="mt-3 text-xs text-white/40">
+            Once your plan is created, you can add it to your phone&apos;s calendar from Plan settings.
+          </p>
+        )}
+      </Section>
+
       {error && (
         <p className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>
       )}
@@ -240,6 +260,80 @@ export function SetupForm() {
         )}
       </div>
     </main>
+  );
+}
+
+/** Subscribe links for the calendar feed. The link itself is fetched, as only the server knows the token. */
+function CalendarLinks() {
+  const [path, setPath] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/calendar", { cache: "no-store" })
+      .then((response) => (response.ok ? (response.json() as Promise<{ path: string }>) : Promise.reject()))
+      .then((body) => !cancelled && setPath(body.path))
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (failed) return <p className="mt-3 text-xs text-white/40">The calendar link needs a connection — try again online.</p>;
+  if (!path) return null;
+
+  const url = `${window.location.origin}${path}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt("Copy this link", url);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] p-3">
+      <p className="text-sm font-medium text-white">Add your plan to your calendar</p>
+      <p className="mt-1 text-xs text-white/50">
+        Your training days appear in your phone&apos;s calendar with an alert at the time above. Change your
+        days or time here and the calendar follows within a few hours.
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <a
+          href={url.replace(/^https?:/, "webcal:")}
+          className="rounded-xl bg-[var(--color-rest)] px-3 py-2.5 text-center text-sm font-semibold text-[var(--color-ink)]"
+        >
+          Subscribe
+        </a>
+        <button
+          onClick={() => void copy()}
+          className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm text-white/80 hover:bg-white/5"
+        >
+          {copied ? "Copied ✓" : "Copy link"}
+        </button>
+      </div>
+      <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-white/45">
+        <li>
+          <span className="text-white/70">iPhone:</span> tap Subscribe, then Subscribe again. Keep &ldquo;Remove
+          alerts&rdquo; off.
+        </li>
+        <li>
+          <span className="text-white/70">Google Calendar:</span> copy the link, then on calendar.google.com choose
+          Other calendars → + → From URL. Google uses its own alerts for subscribed calendars: set one in that
+          calendar&apos;s settings.
+        </li>
+        <li>
+          <span className="text-white/70">No updates needed?</span>{" "}
+          <a href={url} download="dumbbell-plan.ics" className="text-[var(--color-rest)] underline">
+            Download the calendar file
+          </a>{" "}
+          and open it to import the repeating events once.
+        </li>
+      </ul>
+    </div>
   );
 }
 

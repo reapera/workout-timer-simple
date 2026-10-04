@@ -17,14 +17,15 @@ import {
   saveActiveWorkout,
   type TrainingLoad,
 } from "@/lib/training/client";
-import { ladderFor, loadingFor, snapDown, trimNumber } from "@/lib/training/equipment";
+import { loadingFor, trimNumber } from "@/lib/training/equipment";
 import { getExercise, type ExerciseDef } from "@/lib/training/exercises";
 import { formatPlates, formatTarget } from "@/lib/training/format";
 import { BACK_CARE, BACK_CARE_ROUTINE } from "@/lib/training/routines";
-import { buildToday, localDate } from "@/lib/training/schedule";
-import { estimateMinutes, setsForWeek, slotsFor, WORKOUT_NAMES } from "@/lib/training/template";
+import { reviewDue } from "@/lib/training/review";
+import { buildToday, inDeload, localDate } from "@/lib/training/schedule";
+import { estimateMinutes, slotsFor, WORKOUT_NAMES } from "@/lib/training/template";
 import type { Equipment, Slot, TrainingData, WorkoutKey } from "@/lib/training/types";
-import { createWorkout, type WorkoutState } from "@/lib/training/workout";
+import { createWorkout, plannedLoad, type WorkoutState } from "@/lib/training/workout";
 
 import { ExerciseThumb } from "./ExerciseImages";
 import { GuideSheet } from "./GuideSheet";
@@ -99,7 +100,7 @@ export function TodayScreen() {
           </h1>
         </div>
         <nav className="flex shrink-0 gap-2">
-          <HeaderLink href="/exercises">Library</HeaderLink>
+          <HeaderLink href="/progress">Progress</HeaderLink>
           <HeaderLink href="/timer">Timer</HeaderLink>
         </nav>
       </header>
@@ -166,6 +167,8 @@ function Plan({
 }) {
   const plan = buildToday(data.programme, data.history, today);
   const { programme } = data;
+  const deload = inDeload(programme, today);
+  const reviewBlock = reviewDue(programme, today);
   const dayLabel =
     plan.plan === "strength" ? "Strength day" : plan.plan === "backcare" ? "Back care day" : "Rest day";
   const resumable = active && active.phase !== "done" ? active : null;
@@ -175,6 +178,7 @@ function Plan({
       data={data}
       workout={workout}
       week={plan.week}
+      deload={deload}
       heading={heading}
       onGuide={onGuide}
       action={action ? { label: action, onClick: () => onStartWorkout(workout, plan.week) } : undefined}
@@ -194,6 +198,25 @@ function Plan({
             {pending === 1 ? "1 workout is" : `${pending} workouts are`} saved on this phone and will
             upload when you're back online.
           </Notice>
+        )}
+        {reviewBlock !== null && (
+          <Link
+            href="/review"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-rest)]/40 bg-[var(--color-rest)]/10 px-4 py-3"
+          >
+            <span>
+              <span className="block text-sm font-semibold text-[var(--color-rest)]">Your 4-week review is ready</span>
+              <span className="block text-xs text-white/50">See how weeks {reviewBlock * 4 - 3}–{reviewBlock * 4} went and choose what changes.</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold text-[var(--color-rest)]">Open →</span>
+          </Link>
+        )}
+        {deload && programme.deloadUntil && (
+          <p className="rounded-2xl border border-[var(--color-rest)]/30 bg-[var(--color-rest)]/5 px-4 py-3 text-sm text-white/70">
+            <span className="font-semibold text-[var(--color-rest)]">Lighter week</span> until{" "}
+            {formatLongDate(programme.deloadUntil)}: one set fewer and a little lighter. Weights
+            don&apos;t change this week — your normal targets come back after.
+          </p>
         )}
         {resumable && (
           <button
@@ -300,6 +323,7 @@ function WorkoutCard({
   data,
   workout,
   week,
+  deload,
   heading,
   onGuide,
   action,
@@ -307,12 +331,13 @@ function WorkoutCard({
   data: TrainingData;
   workout: WorkoutKey;
   week: number;
+  deload: boolean;
   heading: string;
   onGuide: (exerciseId: string) => void;
   action?: { label: string; onClick: () => void };
 }) {
   const slots = slotsFor(data.slots, workout);
-  const minutes = estimateMinutes(slots, week, data.programme.level);
+  const minutes = estimateMinutes(slots, week, data.programme.level, deload);
   const highlighted = Boolean(action);
 
   return (
@@ -337,7 +362,7 @@ function WorkoutCard({
 
       <ul className="mt-3 divide-y divide-[var(--color-line)]">
         {slots.map((slot) => (
-          <SlotRow key={slot.id} slot={slot} data={data} week={week} onGuide={onGuide} />
+          <SlotRow key={slot.id} slot={slot} data={data} week={week} deload={deload} onGuide={onGuide} />
         ))}
       </ul>
 
@@ -357,26 +382,28 @@ function SlotRow({
   slot,
   data,
   week,
+  deload,
   onGuide,
 }: {
   slot: Slot;
   data: TrainingData;
   week: number;
+  deload: boolean;
   onGuide: (exerciseId: string) => void;
 }) {
   const exercise = getExercise(slot.exerciseId);
-  const sets = setsForWeek(slot.sets, week, data.programme.level);
+  const planned = plannedLoad(slot, data.programme, week, deload);
   const last = data.last[slot.exerciseId];
-  const load = describeLoad(slot, exercise, data.programme.equipment);
+  const load = describeLoad(exercise, planned, data.programme.equipment);
 
   return (
     <li>
       <button onClick={() => onGuide(slot.exerciseId)} className="flex w-full items-center gap-3 py-2.5 text-left">
         <ExerciseThumb images={exercise.images} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-white">{exercise.name}</span>
+          <span className="block leading-snug font-medium text-white">{exercise.name}</span>
           <span className="block truncate text-xs text-white/45">
-            {sets} × {formatTarget(exercise, slot)}
+            {planned.sets} × {formatTarget(exercise, slot)}
             {last && last.values.length > 0 && ` · last ${last.values.join(", ")}`}
           </span>
         </span>
@@ -392,20 +419,17 @@ function SlotRow({
 }
 
 function describeLoad(
-  slot: Slot,
   exercise: ExerciseDef,
+  planned: { weight: number; finding: boolean },
   equipment: Equipment,
 ): { weight: string; detail?: string; highlight?: boolean } {
   if (exercise.load === "none" || exercise.kind === "timed") return { weight: "" };
-  if (slot.weight === null) {
-    const guess = snapDown(ladderFor(exercise, equipment), exercise.startGuess ?? 0);
-    return { weight: "Find it", detail: `try ${trimNumber(guess)} kg`, highlight: true };
-  }
-  if (slot.weight === 0) return { weight: "Bodyweight" };
-  const loading = loadingFor(equipment, exercise.load, slot.weight);
+  if (planned.finding) return { weight: "Find it", detail: `try ${trimNumber(planned.weight)} kg`, highlight: true };
+  if (planned.weight === 0) return { weight: "Bodyweight" };
+  const loading = loadingFor(equipment, exercise.load, planned.weight);
   return {
-    weight: `${trimNumber(slot.weight)} kg${exercise.load === "pair" ? " each" : ""}`,
-    detail: loading ? `${formatPlates(loading.perSide)} per end` : undefined,
+    weight: `${trimNumber(planned.weight)} kg${exercise.load === "pair" ? " each" : ""}`,
+    detail: loading ? (loading.perSide.length ? `${formatPlates(loading.perSide)} per end` : "empty handle") : undefined,
   };
 }
 

@@ -36,6 +36,12 @@ export type Programme = {
   level: Level;
   /** Lower-back care: asks about the back after every exercise. */
   backPain: boolean;
+  /** Last day (YYYY-MM-DD) of a lighter deload week, if one is booked. */
+  deloadUntil: string | null;
+  /** The last 4-week block that was reviewed (0 = none yet). */
+  lastReview: number;
+  /** "HH:MM" for calendar reminders; null = the default time. */
+  reminderTime: string | null;
 };
 
 /** One row of the Programme Exercises database: an exercise and where it stands. */
@@ -110,6 +116,8 @@ export type LastResult = {
   date: string;
   weight: number;
   values: number[];
+  /** What you wrote down last time, shown again before the first set. */
+  note?: string;
 };
 
 /** Everything the Today screen and workout need, as served by /api/training. */
@@ -118,4 +126,35 @@ export type TrainingData = {
   slots: Slot[];
   history: SessionMark[];
   last: Record<string, LastResult>;
+};
+
+/** One exercise in one past workout, as recorded in the Lift Log. */
+export type LiftEntry = {
+  date: string;
+  session: string;
+  workout: WorkoutKey;
+  exerciseId: string;
+  /** kg per dumbbell (0 = bodyweight). */
+  weight: number;
+  /** Reps, or seconds held, per set. */
+  values: number[];
+  result: string | null;
+  back: string | null;
+  effort: string | null;
+};
+
+export type WeightEntry = {
+  date: string;
+  kg: number;
+  bodyFat: number | null;
+};
+
+/** Everything the Progress page and the 4-week review look back over. */
+export type History = {
+  lifts: LiftEntry[];
+  /** Dates back care was done. */
+  backCare: string[];
+  bodyWeight: WeightEntry[];
+  /** Whether a Weight Log database was found next to the Workout Log. */
+  weightLog: boolean;
 };

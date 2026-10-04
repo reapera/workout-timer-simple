@@ -102,12 +102,13 @@ export function slotsFor(slots: Slot[], workout: WorkoutKey): Slot[] {
 }
 
 /** Rough wall-clock length: warm-up, every set (≈3 s a rep), rests, changeovers. */
-export function estimateMinutes(slots: Slot[], week: number, level: Level): number {
+export function estimateMinutes(slots: Slot[], week: number, level: Level, deload = false): number {
   let seconds = 5 * 60;
   for (const slot of slots) {
     const exercise = getExercise(slot.exerciseId);
     const sides = exercise.perSide ? 2 : 1;
-    const sets = setsForWeek(slot.sets, week, level);
+    const normal = setsForWeek(slot.sets, week, level);
+    const sets = deload ? Math.max(1, normal - 1) : normal;
     const reps = ((slot.repMin ?? 0) + (slot.repMax ?? 0)) / 2;
     const work = exercise.kind === "timed" ? (slot.seconds ?? 0) * sides + 5 : reps * 3 * sides;
     seconds += sets * work + (sets - 1) * slot.rest + 60;

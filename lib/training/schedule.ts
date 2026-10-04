@@ -40,6 +40,11 @@ export type TodayPlan = {
   strip: StripDay[];
 };
 
+export const DAYS_IN_WEEK = 7;
+
+/** Calendar reminders go off at this time until another is picked. */
+export const DEFAULT_REMINDER_TIME = "18:00";
+
 export const DEFAULT_TRAINING_DAYS: DayName[] = ["Mon", "Wed", "Fri"];
 export const DEFAULT_BACK_CARE_DAYS: DayName[] = ["Tue", "Thu", "Sat"];
 
@@ -80,6 +85,14 @@ export function weekStart(iso: string): string {
 
 export function weekNumber(startDate: string, date: string): number {
   return Math.max(1, Math.floor(daysBetween(startDate, date) / 7) + 1);
+}
+
+/** A deload lasts seven days, ending on `deloadUntil`. */
+export const DELOAD_DAYS = 7;
+
+export function inDeload(programme: { deloadUntil: string | null }, date: string): boolean {
+  const until = programme.deloadUntil;
+  return Boolean(until) && date <= until! && date >= addDays(until!, -(DELOAD_DAYS - 1));
 }
 
 /* ------------------------------------------------------------------ *

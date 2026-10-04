@@ -26,6 +26,8 @@ export const STRETCH_STEP = 3;
 export const MAX_STRETCH = 6;
 /** Backing off drops roughly this much (10%). */
 export const BACK_OFF = 0.1;
+/** A lighter week never drops more than this; if the next weight down is further, it keeps the weight. */
+export const MAX_DELOAD_DROP = 0.25;
 export const SECONDS_STEP = 5;
 export const MIN_SECONDS = 10;
 
@@ -45,6 +47,7 @@ export function decide(
   exercise: ExerciseDef,
   log: ExerciseLog,
   ladder: number[],
+  options: { deload?: boolean } = {},
 ): Decision {
   const current: SlotState = {
     weight: slot.weight,
@@ -55,6 +58,13 @@ export function decide(
 
   if (!log.sets.length) {
     return { outcome: "skipped", next: current, message: "Skipped — same plan next time" };
+  }
+
+  // A deload week is deliberately light: it says nothing about progress, so
+  // nothing changes. Finding a first working weight still happens.
+  const finding = exercise.kind === "reps" && exercise.load !== "none" && slot.weight === null;
+  if (options.deload && !finding) {
+    return { outcome: "hold", next: current, message: "Lighter week — back to your usual targets next week" };
   }
 
   if (exercise.kind === "timed") return decideTimed(slot, log, current);

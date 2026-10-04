@@ -230,3 +230,16 @@ describe("workingSets", () => {
     expect(workingSets(sets.slice(1)).weight).toBe(7.5);
   });
 });
+
+describe("deload weeks", () => {
+  it("changes nothing, whatever the reps", () => {
+    const decision = decide(slot(), goblet, log([15, 15, 15], 7), ladder(), { deload: true });
+    expect(decision).toMatchObject({ outcome: "hold", next: { weight: 8, stretch: 0, stalls: 0 } });
+    expect(decision.message).toMatch(/^Lighter week/);
+  });
+
+  it("still finds a first working weight", () => {
+    const decision = decide(slot({ weight: null }), goblet, log([12, 11], 6), ladder(), { deload: true });
+    expect(decision).toMatchObject({ outcome: "set", next: { weight: 6 } });
+  });
+});

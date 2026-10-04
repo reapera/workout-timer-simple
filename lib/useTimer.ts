@@ -29,6 +29,15 @@ export function useTimer({ exercises, onFinish }: Options) {
   const [index, setIndex] = useState(0);
   const [remainingMs, setRemainingMs] = useState(() => (segments[0]?.seconds ?? 0) * 1000);
 
+  // The tick loop reads the segment from here, not from its closure: an
+  // interval set up for the previous segment can fire once more before React
+  // re-renders, and must not advance again from a segment already left behind.
+  const indexRef = useRef(0);
+  const showSegment = useCallback((next: number) => {
+    indexRef.current = next;
+    setIndex(next);
+  }, []);
+
   const deadlineRef = useRef(0);
   const pausedRemainingRef = useRef(0);
   const startedAtRef = useRef(0);
@@ -88,7 +97,8 @@ export function useTimer({ exercises, onFinish }: Options) {
 
     const tick = () => {
       const now = Date.now();
-      let cursor = index;
+      const current = indexRef.current;
+      let cursor = current;
       let deadline = deadlineRef.current;
 
       // Catch up across any segments that elapsed while the tab was throttled.
@@ -103,10 +113,10 @@ export function useTimer({ exercises, onFinish }: Options) {
         return;
       }
 
-      if (cursor !== index) {
+      if (cursor !== current) {
         deadlineRef.current = deadline;
         lastBeepRef.current = -1;
-        setIndex(cursor);
+        showSegment(cursor);
         setRemainingMs(deadline - now);
         return;
       }
@@ -130,7 +140,7 @@ export function useTimer({ exercises, onFinish }: Options) {
     tick();
     const id = window.setInterval(tick, 100);
     return () => window.clearInterval(id);
-  }, [status, index, segments, finish]);
+  }, [status, segments, finish, showSegment]);
 
   /* ---------------------------------------------------------------- *
    * Announcements — one per segment entry
@@ -165,10 +175,10 @@ export function useTimer({ exercises, onFinish }: Options) {
       const clamped = Math.max(0, Math.min(next, segments.length - 1));
       lastBeepRef.current = -1;
       deadlineRef.current = Date.now() + segments[clamped].seconds * 1000;
-      setIndex(clamped);
+      showSegment(clamped);
       setRemainingMs(segments[clamped].seconds * 1000);
     },
-    [segments],
+    [segments, showSegment],
   );
 
   const start = useCallback(() => {
@@ -183,10 +193,10 @@ export function useTimer({ exercises, onFinish }: Options) {
     announcedRef.current = -1;
     deadlineRef.current = Date.now() + segments[0].seconds * 1000;
 
-    setIndex(0);
+    showSegment(0);
     setRemainingMs(segments[0].seconds * 1000);
     setStatus("running");
-  }, [segments]);
+  }, [segments, showSegment]);
 
   const pause = useCallback(() => {
     setStatus((current) => {
@@ -250,9 +260,9 @@ export function useTimer({ exercises, onFinish }: Options) {
     pauseStartedRef.current = 0;
     announcedRef.current = -1;
     setStatus("idle");
-    setIndex(0);
+    showSegment(0);
     setRemainingMs((segments[0]?.seconds ?? 0) * 1000);
-  }, [segments]);
+  }, [segments, showSegment]);
 
   useEffect(() => () => announcer.silence(), []);
 

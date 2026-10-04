@@ -262,3 +262,205 @@ describe("training storage", () => {
     await expect(training.createProgramme(input)).rejects.toThrow(/Weight \(kg\)" should be number, not rich text/);
   });
 });
+
+describe("history, body weight and reviews", () => {
+  beforeEach(async () => {
+    await freshFake();
+  });
+
+  async function addWeight(day: string, kg: number, fat?: string) {
+    const response = await fetch(`${process.env.NOTION_API_BASE}/pages`, {
+      method: "POST",
+      headers: { Authorization: "Bearer fake", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        parent: { database_id: IDS.weightLog },
+        properties: {
+          Name: { title: [{ text: { content: day } }] },
+          Date: { date: { start: day } },
+          "Weight (kg)": { number: kg },
+          ...(fat ? { "Body Fat %": { rich_text: [{ text: { content: fat } }] } } : {}),
+        },
+      }),
+    });
+    expect(response.ok).toBe(true);
+  }
+
+  it("returns every lift, back care day and body weight in date order", async () => {
+    await training.createProgramme(input);
+    await training.recordSession(sessionFor(await load(), "session-0101-abcdef"));
+    const { logSession } = await import("../notion");
+    await logSession({
+      routineId: "builtin-back-care",
+      routineName: "Back Care",
+      completed: [{ name: "Cat cow", duration: 45 }],
+      plannedCount: 11,
+      elapsedSeconds: 60,
+      date: "2026-09-29",
+    });
+    await addWeight("2026-08-12", 82.7, "27.2%");
+    await addWeight("2026-07-23", 84);
+
+    const history = await training.loadHistory();
+    expect(history.weightLog).toBe(true);
+    expect(history.lifts.map((lift) => lift.exerciseId)).toEqual(["goblet-squat", "floor-press", "glute-bridge"]);
+    expect(history.lifts[0]).toMatchObject({
+      date: "2026-09-28",
+      workout: "A",
+      weight: 6,
+      values: [20, 19],
+      result: "Set",
+      back: "No pain",
+      effort: "Easy",
+    });
+    expect(history.backCare).toEqual(["2026-09-29"]);
+    expect(history.bodyWeight).toEqual([
+      { date: "2026-07-23", kg: 84, bodyFat: null },
+      { date: "2026-08-12", kg: 82.7, bodyFat: 27.2 },
+    ]);
+  });
+
+  it("logs body weight in the Weight Log's own style, always as a new row", async () => {
+    await training.createProgramme(input);
+    await training.logBodyWeight({ date: "2026-10-05", kg: 82.4, bodyFat: 26.9 });
+    await training.logBodyWeight({ date: "2026-10-05", kg: 82.2, bodyFat: null });
+    const rows = fake.pagesIn(IDS.weightLog);
+    expect(rows).toHaveLength(2);
+    expect(props(rows[0], "Name")).toBe("2026-10-05");
+    expect(props(rows[0], "Weight (kg)")).toBe(82.4);
+    expect(props(rows[0], "Body Fat %")).toBe("26.9%");
+    expect(props(rows[1], "Body Fat %")).toBe("");
+  });
+
+  it("applies review choices: deload week, harder variation, new schedule", async () => {
+    await training.createProgramme(input);
+    const before = await load();
+    const bridge = before.slots.find((slot) => slot.exerciseId === "glute-bridge")!;
+
+    await training.applyReview({
+      block: 1,
+      today: "2026-10-26",
+      deload: true,
+      swaps: [{ slotId: bridge.id, to: "single-leg-glute-bridge" }],
+      schedule: { trainingDays: ["Mon", "Thu"], backCareDays: ["Tue", "Sat"] },
+    });
+
+    const after = await load();
+    expect(after.programme).toMatchObject({
+      lastReview: 1,
+      deloadUntil: "2026-11-01",
+      trainingDays: ["Mon", "Thu"],
+      backCareDays: ["Tue", "Sat"],
+    });
+    expect(after.slots.find((slot) => slot.id === bridge.id)).toMatchObject({
+      exerciseId: "single-leg-glute-bridge",
+      weight: 0,
+      stretch: 0,
+      stalls: 0,
+    });
+  });
+
+  it("keeps a harder variation from a review when plan settings are saved", async () => {
+    await freshFake();
+    await training.createProgramme(input);
+    const press = (await load()).slots.find((slot) => slot.exerciseId === "floor-press")!;
+    await training.applyReview({ block: 1, today: "2026-10-26", deload: false, swaps: [{ slotId: press.id, to: "floor-press-one-arm" }] });
+
+    // Same dumbbells, new reminder time: the one-arm press must survive.
+    await training.updateProgramme({ ...input, reminderTime: "07:00" });
+    expect((await load()).slots.find((slot) => slot.id === press.id)?.exerciseId).toBe("floor-press-one-arm");
+
+    // Going down to one handle still swaps what the equipment chose, and leaves the rest.
+    await training.updateProgramme({ ...input, equipment: { ...DEFAULT_EQUIPMENT, handles: 1 } });
+    const slots = (await load()).slots;
+    expect(slots.find((slot) => slot.id === press.id)?.exerciseId).toBe("floor-press-one-arm");
+    expect(slots.find((slot) => slot.exerciseId.startsWith("romanian-deadlift"))?.exerciseId).toBe("romanian-deadlift-single");
+  });
+
+  it("freezes progression during a deload week", async () => {
+    await training.createProgramme(input);
+    const data = await load();
+    const squat = data.slots.find((slot) => slot.exerciseId === "goblet-squat")!;
+    await training.applyReview({ block: 1, today: "2026-09-28", deload: true, swaps: [] });
+
+    // The squat already has a working weight; the bridge is bodyweight. Both hold.
+    const session = sessionFor(data, "session-0202-abcdef");
+    session.exercises[0] = { ...session.exercises[0], sets: [{ weight: 6, value: 20 }, { weight: 6, value: 20 }] };
+    await training.recordSession(session);
+
+    const after = await load();
+    // Finding a first weight still happens in a deload week…
+    expect(after.slots.find((slot) => slot.id === squat.id)?.weight).toBe(7);
+    // …but a bodyweight move that topped its range does not progress.
+    const lifts = fake.pagesIn(fake.databaseNamed("Lift Log").id);
+    const bridgeRow = lifts.find((row: any) => props(row, "Exercise ID") === "glute-bridge");
+    expect(props(bridgeRow, "Result")).toBe("Hold");
+    expect(props(bridgeRow, "Next")).toMatch(/^Lighter week/);
+  });
+
+  it("adds the newer plan columns to an older Training Programme on first write", async () => {
+    const older = fake.addDatabase({
+      parentId: IDS.healthTracker,
+      title: "Training Programme",
+      properties: { Name: { title: {} }, Active: { checkbox: {} }, "Start Date": { date: {} } },
+    });
+    await training.createProgramme(input);
+    expect(Object.keys(older.properties)).toEqual(expect.arrayContaining(["Deload Until", "Last Review", "Reminder Time"]));
+    await training.updateProgramme({ ...input, reminderTime: "07:15" });
+    expect((await load()).programme.reminderTime).toBe("07:15");
+  });
+
+  it("keeps the note from last time", async () => {
+    await training.createProgramme(input);
+    const session = sessionFor(await load(), "session-0303-abcdef");
+    session.exercises[0] = { ...session.exercises[0], note: "Neutral grip felt better" };
+    await training.recordSession(session);
+    expect((await load()).last["goblet-squat"].note).toBe("Neutral grip felt better");
+  });
+});
+
+describe("calendar feed", () => {
+  type FeedRoute = typeof import("../../app/api/calendar/[token]/route");
+  let feed: FeedRoute;
+  let link: typeof import("../../app/api/calendar/route");
+
+  beforeAll(async () => {
+    process.env.APP_SECRET = "feed-secret";
+    feed = await import("../../app/api/calendar/[token]/route");
+    link = await import("../../app/api/calendar/route");
+  });
+
+  afterAll(() => {
+    delete process.env.APP_SECRET;
+  });
+
+  const get = (token: string) =>
+    feed.GET(new Request(`https://workout.example/api/calendar/${token}`), { params: Promise.resolve({ token }) });
+
+  it("serves the plan to the right link only", async () => {
+    await freshFake();
+    await training.createProgramme({ ...input, reminderTime: "06:45" });
+
+    const { path } = (await (await link.GET()).json()) as { path: string };
+    expect(path).toMatch(/^\/api\/calendar\/[0-9a-f]{32}\.ics$/);
+    const token = path.split("/").pop()!;
+
+    const response = await get(token);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
+    const ics = await response.text();
+    expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR");
+    expect(ics).toContain("DTSTART:20260928T064500");
+    expect(ics).toContain("URL:https://workout.example");
+
+    expect((await get(token.replace(/^./, (c) => (c === "0" ? "1" : "0")))).status).toBe(404);
+    expect((await get("")).status).toBe(404);
+  });
+
+  it("says so when there's no plan yet", async () => {
+    await freshFake();
+    const { path } = (await (await link.GET()).json()) as { path: string };
+    const response = await get(path.split("/").pop()!);
+    expect(response.status).toBe(404);
+    expect(await response.text()).toMatch(/No training plan/);
+  });
+});

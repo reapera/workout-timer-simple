@@ -13,7 +13,7 @@ export function lockSecret(): string {
   return process.env.APP_SECRET || process.env.NOTION_TOKEN || "workout-timer";
 }
 
-export async function passcodeToken(passcode: string, secret: string): Promise<string> {
+async function hmacHex(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -22,9 +22,25 @@ export async function passcodeToken(passcode: string, secret: string): Promise<s
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(`passcode:${passcode}`));
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
   return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+export function passcodeToken(passcode: string, secret: string): Promise<string> {
+  return hmacHex(secret, `passcode:${passcode}`);
+}
+
+/**
+ * The unguessable part of the calendar feed URL. Calendar apps can't unlock
+ * the app, so the feed is public to whoever has the link; changing APP_SECRET
+ * changes the token and revokes every old link.
+ */
+export async function feedToken(secret: string): Promise<string> {
+  return (await hmacHex(secret, "calendar-feed:v1")).slice(0, 32);
+}
+
+/** Calendar feed paths skip the passcode gate; the route checks the token itself. */
+export const FEED_PREFIX = "/api/calendar/";
 
 /** Constant-time string comparison, so response timing leaks nothing. */
 export function safeEqual(a: string, b: string): boolean {

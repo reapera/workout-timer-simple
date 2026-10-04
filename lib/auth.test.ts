@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 
 import { proxy } from "../proxy";
-import { AUTH_COOKIE, passcodeToken, safeEqual } from "./auth";
+import { AUTH_COOKIE, feedToken, passcodeToken, safeEqual } from "./auth";
 
 describe("passcodeToken", () => {
   it("is stable for the same passcode and secret, and differs otherwise", async () => {
@@ -17,6 +17,17 @@ describe("passcodeToken", () => {
     expect(safeEqual("abc", "abc")).toBe(true);
     expect(safeEqual("abc", "abd")).toBe(false);
     expect(safeEqual("abc", "abcd")).toBe(false);
+  });
+});
+
+describe("feedToken", () => {
+  it("is a stable 128-bit token that changes with the secret", async () => {
+    const token = await feedToken("secret");
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+    expect(await feedToken("secret")).toBe(token);
+    expect(await feedToken("other")).not.toBe(token);
+    // Never the passcode cookie, even with the same secret.
+    expect((await passcodeToken("", "secret")).startsWith(token)).toBe(false);
   });
 });
 
@@ -56,6 +67,13 @@ describe("proxy", () => {
 
     expect((await proxy(request("/unlock"))).headers.get("x-middleware-next")).toBe("1");
     expect((await proxy(request("/api/unlock"))).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("lets calendar apps reach the feed, which checks its own token, but not the link", async () => {
+    process.env.APP_PASSCODE = "open sesame";
+    process.env.APP_SECRET = "s3cret";
+    expect((await proxy(request("/api/calendar/abc.ics"))).headers.get("x-middleware-next")).toBe("1");
+    expect((await proxy(request("/api/calendar"))).status).toBe(401);
   });
 
   it("accepts the right cookie", async () => {
