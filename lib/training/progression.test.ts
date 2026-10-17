@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_EQUIPMENT, ladderFor } from "./equipment";
 import { getExercise } from "./exercises";
-import { decide, workingSets } from "./progression";
+import { decide, nextStep, workingSets } from "./progression";
 import type { BackFeel, Effort, ExerciseLog, Slot } from "./types";
 
 const goblet = getExercise("goblet-squat"); // single dumbbell
@@ -275,5 +275,67 @@ describe("holds with a dumbbell (carries)", () => {
   it("still finds a first weight in a lighter week", () => {
     const decision = decide(hold({ weight: null }), carry, log([30, 30], 7, { plannedSets: 2 }), carryLadder, { deload: true });
     expect(decision).toMatchObject({ outcome: "set", next: { weight: 7 } });
+  });
+});
+
+describe("nextStep", () => {
+  const carry = getExercise("farmer-carry");
+  const carryLadder = ladderFor(carry, DEFAULT_EQUIPMENT);
+  const carrySlot = (overrides: Partial<Slot> = {}) =>
+    slot({ exerciseId: "farmer-carry", weight: 8, repMin: null, repMax: null, sets: 2, seconds: 20, maxSeconds: 45, ...overrides });
+  const plankSlot = (overrides: Partial<Slot> = {}) =>
+    slot({ exerciseId: "side-plank", weight: 0, repMin: null, repMax: null, sets: 2, seconds: 20, maxSeconds: 45, ...overrides });
+
+  it("names the next dumbbell up and the reps that earn it", () => {
+    expect(nextStep(slot(), goblet, ladder(), { sets: 3, weight: 8 })).toEqual({ kind: "weight", target: 15, weight: 8.5, seconds: null });
+  });
+
+  it("agrees with what decide does after a session at the top of the range", () => {
+    const step = nextStep(slot({ weight: 6 }), goblet, ladder(), { sets: 3, weight: 6 });
+    const decision = decide(slot({ weight: 6 }), goblet, log([15, 15, 15], 6), ladder());
+    expect(step).toMatchObject({ kind: "weight", weight: decision.next.weight });
+  });
+
+  it("counts from the weight being lifted, not the stored one", () => {
+    // 8 kg stored, but the plates now make 7.5 nearest: the step is from 7.5.
+    expect(nextStep(slot(), goblet, ladder(), { sets: 3, weight: 7.5 })).toMatchObject({ kind: "weight", weight: 8 });
+  });
+
+  it("asks for extra reps before a big jump", () => {
+    // From the 2 kg empty handle the next dumbbell is 4.5 kg, more than double.
+    expect(nextStep(slot({ weight: 2 }), goblet, ladder(), { sets: 3, weight: 2 })).toEqual({ kind: "reps", target: 15, reps: 18 });
+    expect(nextStep(slot({ weight: 2, stretch: 6 }), goblet, ladder(), { sets: 3, weight: 2 })).toEqual({
+      kind: "weight",
+      target: 21,
+      weight: 4.5,
+      seconds: null,
+    });
+  });
+
+  it("offers the first dumbbell for a bodyweight move", () => {
+    const bridgeSlot = slot({ exerciseId: "glute-bridge", weight: 0, sets: 2, repMin: 12, repMax: 20 });
+    expect(nextStep(bridgeSlot, bridge, ladder(bridge), { sets: 2, weight: 0 })).toMatchObject({ kind: "weight", target: 20, weight: 2 });
+  });
+
+  it("adds time to a carry first, then weight at the top time", () => {
+    expect(nextStep(carrySlot(), carry, carryLadder, { sets: 2, weight: 8 })).toEqual({ kind: "seconds", target: 20, seconds: 25 });
+    expect(nextStep(carrySlot({ seconds: 45 }), carry, carryLadder, { sets: 2, weight: 8 })).toEqual({
+      kind: "weight",
+      target: 45,
+      weight: 8.5,
+      seconds: 20,
+    });
+  });
+
+  it("adds time to a bodyweight hold until its ceiling", () => {
+    expect(nextStep(plankSlot(), sidePlank, [0], { sets: 2, weight: 0 })).toEqual({ kind: "seconds", target: 20, seconds: 25 });
+    expect(nextStep(plankSlot({ seconds: 45 }), sidePlank, [0], { sets: 2, weight: 0 })).toBeNull();
+  });
+
+  it("has nothing to show while finding the weight, for bodyweight reps, or at the very top", () => {
+    expect(nextStep(slot({ weight: null }), goblet, ladder(), { sets: 3, weight: 6 })).toBeNull();
+    expect(nextStep(slot({ exerciseId: "dead-bug", weight: 0, repMin: 6, repMax: 10 }), deadBug, [0], { sets: 2, weight: 0 })).toBeNull();
+    const top = ladder().at(-1) ?? 0;
+    expect(nextStep(slot({ weight: top, stretch: 6 }), goblet, ladder(), { sets: 3, weight: top })).toBeNull();
   });
 });

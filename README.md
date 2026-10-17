@@ -49,9 +49,11 @@ lower back that needs care. This is the starting plan; change any of it under
 
 Double progression: earn the reps, then the weight.
 
-1. **First session with a lift:** pick a weight you could do about 15 times and log what you
-   managed. If you landed in the range, that's your working weight. If not, the app estimates
-   a better one and rounds it down to what your plates can make.
+1. **First session with a lift:** it starts from a sensible guess for a beginner, shown as
+   **first try** (e.g. 6 kg for the goblet squat; always a dumbbell, never 0 kg). Change it on
+   the day so it's a weight you could do about 15 times, and log what you managed. If you landed
+   in the range, that's your working weight. If not, the app estimates a better one and rounds
+   it down to what your plates can make.
 2. **Every set at the top of the range** (e.g. 15, 15, 15): next time moves to the next
    dumbbell up, at least ~5% heavier, and reps start again at the bottom of the range.
 3. **In the range:** same weight, and the app pre-fills last time's reps plus one to beat.
@@ -67,6 +69,14 @@ Double progression: earn the reps, then the weight.
 
 The rules live in `lib/training/progression.ts`. The phone and the server use the same code, so
 the summary screen shows exactly what Notion will record.
+
+**Where you see it:** every dumbbell exercise on Today shows its weight — the first try until its
+first session, then your working weight with the plates for each end. Underneath is the next step
+up, e.g. **↑ 15 reps every set → 7 kg**, and the set screen spells it out ("Get 15 reps on every
+set and next time goes up to 7 kg"). Change the weight mid-workout and the goal follows it. The
+hint is worked out by running the progression rules on a session that hits every target, so it
+always matches what really happens. With 1.25–3 kg plates the steps are small (often 0.5–1 kg),
+so a lift can move up every few sessions. Nothing goes up in a lighter week.
 
 Before the first set of each exercise, the workout shows what you did last time and any note you
 left yourself, e.g. *"Hamstrings, not back. Keep the dumbbells close."*
@@ -86,7 +96,7 @@ settings. For Workout A and B you can:
 - **Reorder** with the arrows.
 - **Change** sets, the rep range (or hold times), rest, and the weight. Weights step through
   what your dumbbells can actually make. **Find it** lets the next session work the weight out
-  again.
+  again, starting from the first-try weight shown.
 
 **Dumbbell only** swaps the bodyweight moves in one tap:
 
@@ -95,7 +105,7 @@ settings. For Workout A and B you can:
 | Dead bug | Dumbbell dead bug | Same job: keeping your spine still while your legs move |
 | Bird dog | Farmer carry | Bracing against a load, standing tall |
 | Side plank | Suitcase carry | A side plank you can load: resisting being pulled sideways |
-| Glute bridge, split squat | Same moves, with a dumbbell from the start | |
+| Glute bridge, split squat | Same moves, with a dumbbell from the start (first try 8 kg, and 4.5 kg each) | |
 
 The core moves stay in, loaded, because they're the ones that protect your back. With one handle,
 the farmer carry becomes a suitcase carry. Back care days are separate bodyweight stretching:

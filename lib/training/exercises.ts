@@ -65,7 +65,10 @@ export type ExerciseDef = {
   perSide?: boolean;
   /** Starts with no dumbbell; weight is added once bodyweight gets easy. */
   bodyweightStart?: boolean;
-  /** A sensible first guess (kg per dumbbell) for a beginner finding their weight. */
+  /**
+   * A sensible first guess (kg per dumbbell) for a beginner finding their weight.
+   * Bodyweight-start moves use it when they pick up a dumbbell straight away.
+   */
   startGuess?: number;
   muscles: string[];
   /** Start and end position, in that order. Empty when there is no picture. */
@@ -199,6 +202,7 @@ const LIST: ExerciseDef[] = [
     kind: "reps",
     load: "single",
     bodyweightStart: true,
+    startGuess: 8,
     muscles: ["Glutes", "Hamstrings", "Lower back"],
     images: photos("glute-bridge"),
     imageNote: "The photo goes a little high. Stop when your knees, hips and shoulders are in a straight line.",
@@ -286,6 +290,7 @@ const LIST: ExerciseDef[] = [
     load: "pair",
     perSide: true,
     bodyweightStart: true,
+    startGuess: 4.5,
     muscles: ["Thighs", "Glutes"],
     images: photos("split-squat"),
     cues: [
@@ -306,6 +311,7 @@ const LIST: ExerciseDef[] = [
     load: "single",
     perSide: true,
     bodyweightStart: true,
+    startGuess: 6,
     muscles: ["Thighs", "Glutes"],
     images: photos("split-squat"),
     imageNote: "The photo uses two dumbbells. Hold one dumbbell upright against your chest instead.",
@@ -391,6 +397,7 @@ const LIST: ExerciseDef[] = [
     load: "single",
     perSide: true,
     bodyweightStart: true,
+    startGuess: 4.5,
     muscles: ["Thighs", "Glutes"],
     images: photos("bulgarian-split-squat"),
     imageNote: "The photo uses a barbell and a bench. At home, rest your back foot on a chair or sofa and hold one dumbbell at your chest.",
@@ -433,6 +440,7 @@ const LIST: ExerciseDef[] = [
     load: "single",
     perSide: true,
     bodyweightStart: true,
+    startGuess: 4.5,
     muscles: ["Glutes", "Hamstrings", "Lower back"],
     images: photos("single-leg-glute-bridge"),
     cues: [
@@ -476,6 +484,7 @@ const LIST: ExerciseDef[] = [
     load: "pair",
     perSide: true,
     bodyweightStart: true,
+    startGuess: 4.5,
     prescription: { sets: 3, reps: [8, 12], rest: 90 },
     muscles: ["Thighs", "Glutes"],
     images: photos("reverse-lunge"),
@@ -496,6 +505,7 @@ const LIST: ExerciseDef[] = [
     load: "pair",
     perSide: true,
     bodyweightStart: true,
+    startGuess: 4.5,
     prescription: { sets: 3, reps: [8, 12], rest: 90 },
     muscles: ["Thighs", "Glutes", "Balance"],
     images: photos("step-up"),
@@ -633,6 +643,7 @@ const LIST: ExerciseDef[] = [
     kind: "reps",
     load: "pair",
     bodyweightStart: true,
+    startGuess: 6,
     prescription: { sets: 2, reps: [12, 20], rest: 45 },
     muscles: ["Calves"],
     images: photos("calf-raise"),

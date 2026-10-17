@@ -323,6 +323,56 @@ function decideLoadedHold(slot: Slot, log: ExerciseLog, ladder: number[], curren
 }
 
 /* ------------------------------------------------------------------ *
+ * The next step up
+ * ------------------------------------------------------------------ */
+
+export type NextStep =
+  /** Meet `target` on every set and the next session moves up to `weight` (a carry restarts at `seconds`). */
+  | { kind: "weight"; target: number; weight: number; seconds: number | null }
+  /** The next dumbbell is a big jump: meet `target` on every set and the next session aims for `reps` first. */
+  | { kind: "reps"; target: number; reps: number }
+  /** Hold or carry for `target` on every set and the next session is `seconds` long. */
+  | { kind: "seconds"; target: number; seconds: number };
+
+/**
+ * What a session that meets every target would earn: the goal to show before
+ * and during a workout. It runs `decide` on that session, so it can never
+ * promise more (or less) than the progression will actually do. `null` while
+ * the weight is still being found, for moves that don't progress (bodyweight
+ * reps), and once there is nowhere left to go.
+ */
+export function nextStep(
+  slot: Slot,
+  exercise: ExerciseDef,
+  ladder: number[],
+  planned: { sets: number; weight: number },
+): NextStep | null {
+  if (exercise.load !== "none" && slot.weight === null) return null;
+  const timed = exercise.kind === "timed";
+  const target = timed ? (slot.seconds ?? MIN_SECONDS) : (slot.repMax ?? slot.repMin ?? 0) + slot.stretch;
+  const sets = Math.max(1, planned.sets);
+  const everyTarget: ExerciseLog = {
+    slotId: slot.id,
+    exerciseId: slot.exerciseId,
+    plannedSets: sets,
+    sets: Array.from({ length: sets }, () => ({ weight: planned.weight, value: target })),
+    effort: "good",
+    back: "none",
+  };
+  const { outcome, next } = decide(slot, exercise, everyTarget, ladder);
+
+  if (outcome === "stretch") return { kind: "reps", target, reps: (slot.repMax ?? 0) + next.stretch };
+  if (outcome !== "up") return null;
+  if (next.weight !== null && next.weight !== planned.weight) {
+    return { kind: "weight", target, weight: next.weight, seconds: timed ? next.seconds : null };
+  }
+  if (timed && next.seconds !== null && next.seconds !== slot.seconds) {
+    return { kind: "seconds", target, seconds: next.seconds };
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ *
  * Helpers
  * ------------------------------------------------------------------ */
 

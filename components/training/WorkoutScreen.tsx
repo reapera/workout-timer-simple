@@ -15,8 +15,8 @@ import {
 } from "@/lib/training/client";
 import { ladderFor, loadingFor, trimNumber } from "@/lib/training/equipment";
 import { getExercise, type ExerciseDef } from "@/lib/training/exercises";
-import { formatKg, formatPlates, formatValues, perSideWord, shortDate } from "@/lib/training/format";
-import type { Outcome } from "@/lib/training/progression";
+import { formatKg, formatNextStep, formatPlates, formatValues, perSideWord, shortDate } from "@/lib/training/format";
+import { nextStep, type Outcome } from "@/lib/training/progression";
 import { WARM_UP, WARM_UP_ROUTINE } from "@/lib/training/routines";
 import type { BackFeel, Effort, LastResult } from "@/lib/training/types";
 import {
@@ -301,6 +301,14 @@ function SetView({
     : exercise.finding
       ? `As many good reps as you can (${exercise.repMin}–${exercise.repMax} is the goal)`
       : `Aim for ${aimFor(exercise, exercise.sets.length)} reps · range ${exercise.repMin}–${exercise.repMax}`;
+  // What it takes to move up, at the weight picked for this exercise.
+  const step =
+    state.deload || exercise.finding
+      ? null
+      : nextStep(exercise.slot, definition, ladderFor(definition, state.equipment), {
+          sets: exercise.plannedSets,
+          weight: exercise.weight,
+        });
 
   return (
     <div className="flex flex-1 flex-col">
@@ -312,6 +320,12 @@ function SetView({
           <p className="mt-1 text-sm text-white/50">
             Set {setNumber} of {exercise.plannedSets} · {target}
           </p>
+          {step && (
+            <p className="mt-1 text-xs text-[var(--color-work)]/85">
+              <span aria-hidden="true">↑ </span>
+              {formatNextStep(step, definition, { long: true })}
+            </p>
+          )}
         </div>
         <button
           onClick={() => onGuide(definition.id)}

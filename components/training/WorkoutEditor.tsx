@@ -12,6 +12,7 @@ import { rotationFor } from "@/lib/training/schedule";
 import { slotsFor, workoutName, workoutTitle } from "@/lib/training/template";
 import { isWorkoutKey, WORKOUT_KEYS, type Equipment, type Slot, type TrainingData, type WorkoutKey } from "@/lib/training/types";
 import type { SlotUpdate } from "@/lib/training/validate";
+import { firstGuess } from "@/lib/training/workout";
 
 import { ExerciseThumb } from "./ExerciseImages";
 import { ProblemCard, Spinner, SubPage } from "./PageStates";
@@ -392,11 +393,12 @@ function BackCareNote({ data }: { data: TrainingData }) {
  * One exercise in the list
  * ------------------------------------------------------------------ */
 
-export function weightLabel(slot: Pick<Slot, "weight">, exercise: ExerciseDef): string {
+export function weightLabel(slot: Pick<Slot, "weight">, exercise: ExerciseDef, equipment: Equipment): string {
   if (exercise.load === "none") return "";
-  if (slot.weight === null) return "Find it";
-  if (slot.weight === 0) return "Bodyweight";
-  return `${trimNumber(slot.weight)} kg${exercise.load === "pair" ? " each" : ""}`;
+  // Still finding the weight: show what the first session starts with.
+  const kg = slot.weight ?? firstGuess(exercise, equipment);
+  if (kg === 0) return "Bodyweight";
+  return `${trimNumber(kg)} kg${exercise.load === "pair" ? " each" : ""}`;
 }
 
 function SlotRow({
@@ -417,7 +419,7 @@ function SlotRow({
   onMove: (direction: -1 | 1) => void;
 }) {
   const exercise = getExercise(slot.exerciseId);
-  const weight = weightLabel(slot, exercise);
+  const weight = weightLabel(slot, exercise, equipment);
   const usable = exercise.load !== "pair" || equipment.handles > 1;
 
   return (
@@ -432,8 +434,11 @@ function SlotRow({
           {!usable && <span className="block text-xs text-[var(--color-prep)]">Needs two dumbbells — swap it</span>}
         </span>
         {weight && (
-          <span className={`shrink-0 text-right text-xs font-semibold ${slot.weight === null ? "text-[var(--color-prep)]" : "text-white/80"}`}>
-            {weight}
+          <span className="shrink-0 text-right">
+            <span className={`block text-xs font-semibold ${slot.weight === null ? "text-[var(--color-prep)]" : "text-white/80"}`}>
+              {weight}
+            </span>
+            {slot.weight === null && <span className="block text-[11px] text-white/40">first try</span>}
           </span>
         )}
       </button>
@@ -628,7 +633,13 @@ function SlotSheet({
         {exercise.load !== "none" && (
           <Stepper
             label="Weight"
-            hint={draft.weight === null ? "Your next session works it out" : exercise.load === "pair" ? "Each dumbbell" : undefined}
+            hint={
+              draft.weight === null
+                ? `Starts at ${trimNumber(firstGuess(exercise, equipment))} kg — your next session works it out`
+                : exercise.load === "pair"
+                  ? "Each dumbbell"
+                  : undefined
+            }
             display={weightText}
             onLess={choice > 0 ? () => set({ weight: choices[choice - 1] }) : undefined}
             onMore={choice < choices.length - 1 ? () => set({ weight: choices[Math.max(0, choice) + 1] }) : undefined}

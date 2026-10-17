@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_EQUIPMENT } from "./equipment";
+import { DEFAULT_EQUIPMENT, ladderFor, parsePlates } from "./equipment";
+import { EXERCISES, getExercise } from "./exercises";
 import { buildSlots } from "./template";
-import type { TrainingData } from "./types";
+import type { Equipment, TrainingData } from "./types";
 import {
   aimFor,
   applySession,
   applyWorkout,
   createWorkout,
+  firstGuess,
   outcomes,
   plannedLoad,
   reduce,
@@ -273,5 +275,43 @@ describe("deload weeks", () => {
     expect(after.deload).toBe(false);
     const before = createWorkout({ data: source, workout: "A", date: "2026-09-27", week: 1, id: "s3", now: T0 });
     expect(before.deload).toBe(false);
+  });
+});
+
+describe("first weights", () => {
+  // The plates in the issue that prompted this: 3 kg plates doubled, four to an end.
+  const owned: Equipment = { ...DEFAULT_EQUIPMENT, plates: parsePlates("1.25×4, 1.5×4, 2×4, 2.5×4, 3×8"), platesPerSide: 4 };
+
+  it("starts every dumbbell exercise with a dumbbell, never 0 kg", () => {
+    for (const equipment of [DEFAULT_EQUIPMENT, owned, { ...DEFAULT_EQUIPMENT, handleWeight: 0 }]) {
+      for (const exercise of Object.values(EXERCISES)) {
+        if (exercise.load === "none") continue;
+        if (exercise.load === "pair" && equipment.handles < 2) continue;
+        const guess = firstGuess(exercise, equipment);
+        expect(guess, exercise.id).toBeGreaterThan(0);
+        expect(ladderFor(exercise, equipment), exercise.id).toContain(guess);
+      }
+    }
+  });
+
+  it("gives moves that usually start at bodyweight a dumbbell to start with", () => {
+    expect(firstGuess(getExercise("glute-bridge"), DEFAULT_EQUIPMENT)).toBe(8);
+    expect(firstGuess(getExercise("split-squat"), owned)).toBe(4.5);
+    expect(firstGuess(getExercise("farmer-carry"), owned)).toBe(8);
+    expect(firstGuess(getExercise("dead-bug"), owned)).toBe(0);
+  });
+
+  it("takes the lightest dumbbell when even that is heavier than the guess", () => {
+    const heavy = { ...DEFAULT_EQUIPMENT, handleWeight: 10 };
+    expect(firstGuess(getExercise("goblet-squat"), heavy)).toBe(10);
+    expect(firstGuess(getExercise("glute-bridge"), heavy)).toBe(10);
+  });
+
+  it("plans a dumbbell for a bodyweight move switched to finding its weight", () => {
+    const source = data();
+    const bridge = source.slots.find((slot) => slot.exerciseId === "glute-bridge");
+    if (!bridge) throw new Error("no glute bridge");
+    expect(plannedLoad({ ...bridge, weight: null }, source.programme, 3, false)).toEqual({ sets: 2, weight: 8, finding: true });
+    expect(plannedLoad(bridge, source.programme, 3, false)).toEqual({ sets: 2, weight: 0, finding: false });
   });
 });

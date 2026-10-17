@@ -17,9 +17,10 @@ import {
   saveActiveWorkout,
   type TrainingLoad,
 } from "@/lib/training/client";
-import { loadingFor, trimNumber } from "@/lib/training/equipment";
+import { ladderFor, loadingFor, trimNumber } from "@/lib/training/equipment";
 import { getExercise, type ExerciseDef } from "@/lib/training/exercises";
-import { formatPlates, formatTarget } from "@/lib/training/format";
+import { formatNextStep, formatPlates, formatTarget } from "@/lib/training/format";
+import { nextStep } from "@/lib/training/progression";
 import { BACK_CARE, BACK_CARE_ROUTINE } from "@/lib/training/routines";
 import { reviewDue } from "@/lib/training/review";
 import { buildToday, inDeload, localDate, rotationFor } from "@/lib/training/schedule";
@@ -351,6 +352,7 @@ function WorkoutCard({
   const slots = slotsFor(data.slots, workout);
   const minutes = estimateMinutes(slots, week, data.programme.level, deload);
   const highlighted = Boolean(action);
+  const finding = slots.some((slot) => slot.weight === null && getExercise(slot.exerciseId).load !== "none");
 
   return (
     <section
@@ -381,6 +383,13 @@ function WorkoutCard({
         {workoutName(slots).toLowerCase() === workoutTitle(data.programme, workout).toLowerCase() ? "" : `${workoutName(slots)} · `}
         about {minutes} min
       </p>
+
+      {finding && (
+        <p className="mt-3 rounded-xl bg-[var(--color-prep)]/10 px-3 py-2 text-xs leading-relaxed text-[var(--color-prep)]">
+          &ldquo;First try&rdquo; weights are a starting guess — adjust them during the workout. The app sets
+          your weights from what you log, then moves them up as you get stronger.
+        </p>
+      )}
 
       <ul className="mt-3 divide-y divide-[var(--color-line)]">
         {slots.map((slot) => (
@@ -417,40 +426,55 @@ function SlotRow({
   const planned = plannedLoad(slot, data.programme, week, deload);
   const last = data.last[slot.exerciseId];
   const load = describeLoad(exercise, planned, data.programme.equipment);
+  // A lighter week doesn't move anything up, so there's no goal to show.
+  const step = deload ? null : nextStep(slot, exercise, ladderFor(exercise, data.programme.equipment), planned);
 
   return (
     <li>
       <button onClick={() => onGuide(slot.exerciseId)} className="flex w-full items-center gap-3 py-2.5 text-left">
         <ExerciseThumb images={exercise.images} />
         <span className="min-w-0 flex-1">
-          <span className="block leading-snug font-medium text-white">{exercise.name}</span>
-          <span className="block truncate text-xs text-white/45">
-            {planned.sets} × {formatTarget(exercise, slot)}
-            {last && last.values.length > 0 && ` · last ${last.values.join(", ")}`}
+          <span className="flex items-center gap-3">
+            <span className="min-w-0 flex-1">
+              <span className="block leading-snug font-medium text-white">{exercise.name}</span>
+              <span className="block truncate text-xs text-white/45">
+                {planned.sets} × {formatTarget(exercise, slot)}
+                {last && last.values.length > 0 && ` · last ${last.values.join(", ")}`}
+              </span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className={`block text-sm font-semibold ${load.highlight ? "text-[var(--color-prep)]" : "text-white"}`}>
+                {load.weight}
+              </span>
+              {load.detail && <span className="block text-[11px] text-white/40">{load.detail}</span>}
+            </span>
           </span>
-        </span>
-        <span className="shrink-0 text-right">
-          <span className={`block text-sm font-semibold ${load.highlight ? "text-[var(--color-prep)]" : "text-white"}`}>
-            {load.weight}
-          </span>
-          {load.detail && <span className="block text-[11px] text-white/40">{load.detail}</span>}
+          {/* Under both columns, so the weight it leads to is never cut off. */}
+          {step && (
+            <span className="mt-0.5 block text-xs text-[var(--color-work)]/85">
+              <span aria-hidden="true">↑ </span>
+              {formatNextStep(step, exercise)}
+            </span>
+          )}
         </span>
       </button>
     </li>
   );
 }
 
+/** The dumbbell for a row: every loaded move shows a weight, carries included. */
 function describeLoad(
   exercise: ExerciseDef,
   planned: { weight: number; finding: boolean },
   equipment: Equipment,
 ): { weight: string; detail?: string; highlight?: boolean } {
-  if (exercise.load === "none" || exercise.kind === "timed") return { weight: "" };
-  if (planned.finding) return { weight: "Find it", detail: `try ${trimNumber(planned.weight)} kg`, highlight: true };
+  if (exercise.load === "none") return { weight: "" };
   if (planned.weight === 0) return { weight: "Bodyweight" };
+  const weight = `${trimNumber(planned.weight)} kg${exercise.load === "pair" ? " each" : ""}`;
+  if (planned.finding) return { weight, detail: "first try", highlight: true };
   const loading = loadingFor(equipment, exercise.load, planned.weight);
   return {
-    weight: `${trimNumber(planned.weight)} kg${exercise.load === "pair" ? " each" : ""}`,
+    weight,
     detail: loading ? (loading.perSide.length ? `${formatPlates(loading.perSide)} per end` : "empty handle") : undefined,
   };
 }

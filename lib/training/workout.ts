@@ -1,5 +1,5 @@
 import { ladderFor, snapDown, snapNearest, stepDown } from "./equipment";
-import { getExercise } from "./exercises";
+import { getExercise, type ExerciseDef } from "./exercises";
 import { BACK_OFF, decide, MAX_DELOAD_DROP, workingSets, type Decision } from "./progression";
 import { inDeload } from "./schedule";
 import { setsForWeek, slotsFor, workoutTitle } from "./template";
@@ -83,6 +83,20 @@ export type Action =
   | { type: "submitted"; now: number };
 
 /**
+ * The weight to try first when a lift has no working weight yet: the
+ * exercise's guess on your dumbbells, and always a dumbbell — never 0 kg,
+ * even for moves that could start at bodyweight. 0 only for bodyweight moves.
+ */
+export function firstGuess(
+  exercise: Pick<ExerciseDef, "load" | "bodyweightStart" | "startGuess">,
+  equipment: Equipment,
+): number {
+  if (exercise.load === "none") return 0;
+  const dumbbells = ladderFor(exercise, equipment).filter((kg) => kg > 0);
+  return snapDown(dumbbells, exercise.startGuess ?? dumbbells[0] ?? 0);
+}
+
+/**
  * Sets and kg per dumbbell for a slot, as a workout would start it: the
  * nearest weight the dumbbells can make, a first guess when finding the
  * weight, and one set fewer and ~10% lighter in a deload week (the same
@@ -99,7 +113,7 @@ export function plannedLoad(
   const finding = slot.weight === null && exercise.load !== "none";
   let weight = 0;
   if (exercise.load !== "none") {
-    weight = finding ? snapDown(ladder, exercise.startGuess ?? ladder[0] ?? 0) : snapNearest(ladder, slot.weight ?? 0);
+    weight = finding ? firstGuess(exercise, programme.equipment) : snapNearest(ladder, slot.weight ?? 0);
     if (deload && !finding) {
       const lighter = stepDown(ladder, weight, BACK_OFF);
       if (lighter >= weight * (1 - MAX_DELOAD_DROP)) weight = lighter;

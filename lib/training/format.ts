@@ -1,5 +1,6 @@
 import { trimNumber } from "./equipment";
 import type { ExerciseDef } from "./exercises";
+import type { NextStep } from "./progression";
 
 /** "8.5 kg", or "bodyweight" for 0. */
 export function formatKg(kg: number): string {
@@ -24,6 +25,35 @@ export function formatTarget(
 
 export function perSideWord(exercise: Pick<ExerciseDef, "id">): string {
   return /squat|lunge|leg/.test(exercise.id) ? "per leg" : "per side";
+}
+
+/**
+ * The next step up. Short, for a list row: "15 reps every set → 7 kg".
+ * Long, for the workout screen: "Get 15 reps on every set and next time
+ * goes up to 7 kg each."
+ */
+export function formatNextStep(
+  step: NextStep,
+  exercise: Pick<ExerciseDef, "kind" | "load">,
+  options: { long?: boolean } = {},
+): string {
+  const timed = exercise.kind === "timed";
+  const each = exercise.load === "pair" ? " each" : "";
+  if (!options.long) {
+    const goal = timed ? `${step.target} s every set` : `${step.target} reps every set`;
+    if (step.kind === "weight") return `${goal} → ${trimNumber(step.weight)} kg`;
+    if (step.kind === "seconds") return `${goal} → ${step.seconds} s`;
+    return `${goal} → aim for ${step.reps}`;
+  }
+  const goal = timed
+    ? `${exercise.load === "none" ? "Hold" : "Carry"} for ${step.target} s on every set`
+    : `Get ${step.target} reps on every set`;
+  if (step.kind === "weight") {
+    const restart = step.seconds !== null ? ` (for ${step.seconds} s)` : "";
+    return `${goal} and next time goes up to ${trimNumber(step.weight)} kg${each}${restart}.`;
+  }
+  if (step.kind === "seconds") return `${goal} and next time is ${step.seconds} s.`;
+  return `${goal} and next time aims for ${step.reps} — the next dumbbell up is a big jump.`;
 }
 
 /** "12, 11, 10" or "30 s, 25 s". */
