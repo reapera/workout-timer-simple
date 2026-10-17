@@ -24,6 +24,35 @@ export function canDo(exercise: ExerciseDef, equipment: Equipment): boolean {
   return true;
 }
 
+/** The programme's own exercise behind an equipment-specific variant. */
+export function canonicalExercise(exerciseId: string): string {
+  const variants: Record<string, string> = {
+    "floor-press-one-arm": "floor-press",
+    "bench-press": "floor-press",
+    "romanian-deadlift-single": "romanian-deadlift",
+    "split-squat-goblet": "split-squat",
+    "dumbbell-dead-bug-single": "dumbbell-dead-bug",
+  };
+  return variants[exerciseId] ?? exerciseId;
+}
+
+/** Swaps for what you own: a bench, or a single handle. */
+export function substitute(exerciseId: string, equipment: Equipment): string {
+  if (equipment.handles < 2) {
+    const single: Record<string, string> = {
+      "floor-press": "floor-press-one-arm",
+      "bench-press": "floor-press-one-arm",
+      "romanian-deadlift": "romanian-deadlift-single",
+      "split-squat": "split-squat-goblet",
+      "farmer-carry": "suitcase-carry",
+      "dumbbell-dead-bug": "dumbbell-dead-bug-single",
+    };
+    return single[exerciseId] ?? exerciseId;
+  }
+  if (equipment.bench && exerciseId === "floor-press") return "bench-press";
+  return exerciseId;
+}
+
 /** Uses a dumbbell today: not bodyweight-only, and not still at bodyweight. */
 export function slotUsesDumbbell(slot: Pick<Slot, "exerciseId" | "weight">): boolean {
   return getExercise(slot.exerciseId).load !== "none" && slot.weight !== 0;
@@ -34,7 +63,9 @@ export function dumbbellOnlyChanges(slots: Slot[], equipment: Equipment): SlotUp
   return slots.flatMap((slot): SlotUpdate[] => {
     const swap = DUMBBELL_VERSION[slot.exerciseId];
     if (swap) {
-      const to = canDo(getExercise(swap), equipment) ? swap : "suitcase-carry";
+      // The version for these dumbbells: with one handle, the one-dumbbell carry and dead bug.
+      const version = substitute(swap, equipment);
+      const to = canDo(getExercise(version), equipment) ? version : "suitcase-carry";
       return [{ id: slot.id, exerciseId: to }];
     }
     const exercise = getExercise(slot.exerciseId);

@@ -1,6 +1,9 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
-import { canDo, dumbbellOnlyChanges, exerciseGroups, slotUsesDumbbell } from "./customize";
+import { canDo, canonicalExercise, dumbbellOnlyChanges, exerciseGroups, slotUsesDumbbell, substitute } from "./customize";
 import { DEFAULT_EQUIPMENT } from "./equipment";
 import { EXERCISE_LIST, getExercise } from "./exercises";
 import { buildSlots, prescriptionFor, seedFor, startingWeight, workoutName } from "./template";
@@ -18,6 +21,13 @@ describe("the exercise library", () => {
       if (exercise.pattern !== "mobility") expect(exercise.images.length, exercise.id).toBe(2);
     }
   });
+
+  it("has every picture it points to", () => {
+    const publicDir = fileURLToPath(new URL("../../public", import.meta.url));
+    for (const exercise of EXERCISE_LIST) {
+      for (const image of exercise.images) expect(existsSync(publicDir + image), image).toBe(true);
+    }
+  });
 });
 
 describe("dumbbellOnlyChanges", () => {
@@ -33,11 +43,20 @@ describe("dumbbellOnlyChanges", () => {
     ]);
   });
 
-  it("uses the one-dumbbell carry when there's only one handle", () => {
+  it("uses the one-dumbbell carry and dead bug when there's only one handle", () => {
     const one: Equipment = { ...DEFAULT_EQUIPMENT, handles: 1 };
-    const changes = dumbbellOnlyChanges(slots(one), one);
+    const plan = slots(one);
+    const changes = dumbbellOnlyChanges(plan, one);
     expect(changes.filter((change) => change.exerciseId === "suitcase-carry")).toHaveLength(2);
     expect(changes.some((change) => change.exerciseId === "farmer-carry")).toBe(false);
+    const deadBug = plan.find((slot) => slot.exerciseId === "dead-bug");
+    expect(changes.find((change) => change.id === deadBug?.id)?.exerciseId).toBe("dumbbell-dead-bug-single");
+  });
+
+  it("maps the one-dumbbell dead bug both ways as the handles change", () => {
+    expect(substitute("dumbbell-dead-bug", { ...DEFAULT_EQUIPMENT, handles: 1 })).toBe("dumbbell-dead-bug-single");
+    expect(substitute("dumbbell-dead-bug", DEFAULT_EQUIPMENT)).toBe("dumbbell-dead-bug");
+    expect(canonicalExercise("dumbbell-dead-bug-single")).toBe("dumbbell-dead-bug");
   });
 
   it("has nothing left to do once every exercise uses a dumbbell", () => {

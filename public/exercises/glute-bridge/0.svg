@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="Glute bridge, start: on your back, knees bent, feet flat, one dumbbell resting across the crease of the hips and held at both ends">
+  <rect width="600" height="400" fill="#1b1e29"/>
+  <rect x="30" y="356" width="540" height="8" rx="4" fill="#38a8f5" opacity="0.35"/>
+  <line x1="30" y1="364" x2="570" y2="364" stroke="#2a2f3f" stroke-width="4"/>
+  <g transform="translate(40 0)">
+  <line x1="150" y1="336" x2="300" y2="336" stroke="#e8ebf3" stroke-width="28" stroke-linecap="round"/>
+  <polyline points="300,336 386,250 442,346" fill="none" stroke="#e8ebf3" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="436" y1="352" x2="476" y2="352" stroke="#e8ebf3" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="116" cy="330" r="23" fill="#e8ebf3"/>
+  <line x1="300" y1="300" x2="320" y2="278" stroke="#c7cdd9" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="320" cy="278" r="18" fill="#c98a1e"/>
+  <circle cx="300" cy="300" r="22" fill="#f5a524"/>
+  <circle cx="300" cy="300" r="6" fill="#c98a1e"/>
+  <line x1="162" y1="326" x2="284" y2="312" stroke="#e8ebf3" stroke-width="13" stroke-linecap="round"/>
+  </g>
+</svg>

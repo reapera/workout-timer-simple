@@ -36,7 +36,7 @@ const GROUPS = [
   },
   {
     title: "Swaps for your equipment",
-    ids: ["bench-press", "floor-press-one-arm", "romanian-deadlift-single", "split-squat-goblet"],
+    ids: ["bench-press", "floor-press-one-arm", "romanian-deadlift-single", "split-squat-goblet", "dumbbell-dead-bug-single"],
   },
   {
     title: "Warm-up & back care",

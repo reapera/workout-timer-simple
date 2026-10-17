@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="Glute bridge, top: hips lifted into a straight line from knees to shoulders, the dumbbell still held on the hips">
+  <rect width="600" height="400" fill="#1b1e29"/>
+  <rect x="30" y="356" width="540" height="8" rx="4" fill="#38a8f5" opacity="0.35"/>
+  <line x1="30" y1="364" x2="570" y2="364" stroke="#2a2f3f" stroke-width="4"/>
+  <g transform="translate(40 0)">
+  <line x1="150" y1="336" x2="290" y2="284" stroke="#e8ebf3" stroke-width="28" stroke-linecap="round"/>
+  <polyline points="290,284 402,240 442,346" fill="none" stroke="#e8ebf3" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="436" y1="352" x2="476" y2="352" stroke="#e8ebf3" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="116" cy="330" r="23" fill="#e8ebf3"/>
+  <line x1="277.5" y1="250.3" x2="297.5" y2="228.3" stroke="#c7cdd9" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="297.5" cy="228.3" r="18" fill="#c98a1e"/>
+  <circle cx="277.5" cy="250.3" r="22" fill="#f5a524"/>
+  <circle cx="277.5" cy="250.3" r="6" fill="#c98a1e"/>
+  <line x1="162" y1="326" x2="261.5" y2="262.3" stroke="#e8ebf3" stroke-width="13" stroke-linecap="round"/>
+  </g>
+</svg>

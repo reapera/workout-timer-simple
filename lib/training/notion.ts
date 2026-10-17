@@ -14,6 +14,7 @@ import {
   readTitle,
   type NotionPage,
 } from "../notion";
+import { canonicalExercise, substitute } from "./customize";
 import { DEFAULT_EQUIPMENT, formatPlates, ladderFor, parsePlates } from "./equipment";
 import { EXERCISES, getExercise } from "./exercises";
 import { formatKg, formatValues } from "./format";
@@ -32,12 +33,10 @@ import {
 import { addDays, DELOAD_DAYS, inDeload } from "./schedule";
 import {
   buildSlots,
-  canonicalExercise,
   prescriptionFor,
   seedFor,
   seedsForPlan,
   startingWeight,
-  substitute,
   targetsFor,
   type SlotSeed,
 } from "./template";

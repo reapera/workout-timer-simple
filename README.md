@@ -102,14 +102,15 @@ settings. For Workout A and B you can:
 
 | From | To | Why |
 | --- | --- | --- |
-| Dead bug | Dumbbell dead bug | Same job: keeping your spine still while your legs move |
+| Dead bug | Dumbbell dead bug | The same move with a light dumbbell in each hand: your spine stays still while an arm and the opposite leg reach out |
 | Bird dog | Farmer carry | Bracing against a load, standing tall |
 | Side plank | Suitcase carry | A side plank you can load: resisting being pulled sideways |
 | Glute bridge, split squat | Same moves, with a dumbbell from the start (first try 8 kg, and 4.5 kg each) | |
 
 The core moves stay in, loaded, because they're the ones that protect your back. With one handle,
-the farmer carry becomes a suitcase carry. Back care days are separate bodyweight stretching:
-turn them off in Plan settings by unselecting the days.
+the farmer carry becomes a suitcase carry, and the dumbbell dead bug uses one dumbbell held in both
+hands. Back care days are separate bodyweight stretching: turn them off in Plan settings by
+unselecting the days.
 
 The library now also has sumo squats, reverse lunges, step-ups, floor flies, lateral raises,
 seated reverse flies, biceps and hammer curls, lying triceps extensions, calf raises, farmer and
@@ -465,8 +466,9 @@ require a connection.
 - Exercise photos come from [free-exercise-db](https://github.com/yuhonas/free-exercise-db),
   released into the public domain (Unlicense). The dataset doesn't say where the photos were
   originally taken, which is fine for a personal app. Replace them if you ever publish it.
-- The goblet squat, bird dog, farmer and suitcase carry, and dumbbell dead bug drawings were
-  made for this app.
+- The goblet squat, bird dog, farmer and suitcase carry, dead bug (with and without dumbbells)
+  and glute bridge drawings were made for this app. The glute bridge drawing shows where the
+  dumbbell goes: across the crease of the hips, held at both ends.
 - This is a training aid, not medical advice. Stop any exercise that causes sharp pain. Back
   pain that spreads down a leg, comes with numbness or weakness, or keeps getting worse needs a
   doctor or physiotherapist.

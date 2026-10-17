@@ -1,4 +1,4 @@
-import { canDo } from "./customize";
+import { canDo, canonicalExercise, substitute } from "./customize";
 import { getExercise, type ExerciseDef, type Pattern, type Prescription } from "./exercises";
 import { DEFAULT_PLAN, type Plan } from "./plans";
 import type { Equipment, Level, Programme, Slot, WorkoutKey } from "./types";
@@ -18,33 +18,6 @@ export const WORKOUT_NAMES: Record<"A" | "B", string> = {
   A: "Squat · Press · Row",
   B: "Hinge · Lunge · Press",
 };
-
-/** The programme's own exercise behind an equipment-specific variant. */
-export function canonicalExercise(exerciseId: string): string {
-  const variants: Record<string, string> = {
-    "floor-press-one-arm": "floor-press",
-    "bench-press": "floor-press",
-    "romanian-deadlift-single": "romanian-deadlift",
-    "split-squat-goblet": "split-squat",
-  };
-  return variants[exerciseId] ?? exerciseId;
-}
-
-/** Swaps for what you own: a bench, or a single handle. */
-export function substitute(exerciseId: string, equipment: Equipment): string {
-  if (equipment.handles < 2) {
-    const single: Record<string, string> = {
-      "floor-press": "floor-press-one-arm",
-      "bench-press": "floor-press-one-arm",
-      "romanian-deadlift": "romanian-deadlift-single",
-      "split-squat": "split-squat-goblet",
-      "farmer-carry": "suitcase-carry",
-    };
-    return single[exerciseId] ?? exerciseId;
-  }
-  if (equipment.bench && exerciseId === "floor-press") return "bench-press";
-  return exerciseId;
-}
 
 /** What a newly added exercise starts with: its own default, the plan's, or one by kind. */
 export function prescriptionFor(exercise: ExerciseDef): Prescription {

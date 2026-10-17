@@ -57,6 +57,9 @@ describe("ready-made plans", () => {
     expect(ids).toContain("romanian-deadlift-single");
     expect(ids).not.toContain("farmer-carry");
     expect(ids.filter((id) => id === "suitcase-carry")).toHaveLength(2);
+    // The dead bug with a dumbbell in each hand becomes the one-dumbbell version.
+    expect(ids).toContain("dumbbell-dead-bug-single");
+    expect(ids).not.toContain("dumbbell-dead-bug");
     expect(ids).not.toContain("dumbbell-curl");
     // Orders stay 1, 2, 3… within each workout.
     expect(seeds.filter((seed) => seed.workout === "A").map((seed) => seed.order)).toEqual([1, 2, 3]);

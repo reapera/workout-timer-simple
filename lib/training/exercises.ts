@@ -4,8 +4,9 @@
  * Content lives in code (not Notion) because it is the same for everyone and
  * must work offline at home with no signal. Photos are start/end frames from
  * free-exercise-db (released under the Unlicense). The goblet squat, bird dog,
- * carries and dumbbell dead bug are simple drawings made for this app because
- * that dataset has no usable photos of them.
+ * carries, dead bugs and glute bridge are simple drawings made for this app,
+ * because that dataset has no photos of them that show the move (or where the
+ * dumbbell goes).
  */
 
 export type LoadType =
@@ -204,17 +205,18 @@ const LIST: ExerciseDef[] = [
     bodyweightStart: true,
     startGuess: 8,
     muscles: ["Glutes", "Hamstrings", "Lower back"],
-    images: photos("glute-bridge"),
-    imageNote: "The photo goes a little high. Stop when your knees, hips and shoulders are in a straight line.",
+    images: drawing("glute-bridge"),
+    imageNote: "No dumbbell yet? Do the same move with your arms flat on the floor beside you.",
     cues: [
       "Lie on your back, knees bent, feet flat and hip-width apart.",
-      "Squeeze your glutes and lift your hips until you are straight from knees to shoulders.",
+      "Rest one dumbbell across the crease of your hips (where your legs meet your body) and hold both ends so it can't roll. A folded towel under it is more comfortable.",
+      "Squeeze your glutes and lift your hips until you are straight from knees to shoulders. The dumbbell rides up with you.",
       "Hold for a second at the top, then lower slowly.",
-      "When bodyweight gets easy, rest a dumbbell across your hips.",
     ],
     mistakes: [
       "Arching your lower back to get higher.",
       "Pushing through your toes instead of your heels.",
+      "Letting the dumbbell slide up onto your stomach — keep it on the crease of your hips.",
     ],
     back: "Strong glutes take strain off your lower back. Keep your ribs down and lift with your glutes, not by arching.",
     video: "glute bridge form",
@@ -227,7 +229,8 @@ const LIST: ExerciseDef[] = [
     load: "none",
     perSide: true,
     muscles: ["Deep core"],
-    images: photos("dead-bug"),
+    images: drawing("dead-bug"),
+    imageNote: "The arm and leg that move are drawn solid; the faded ones stay where they are.",
     cues: [
       "Lie on your back, arms pointing at the ceiling, knees bent 90° above your hips.",
       "Gently press your lower back into the floor.",
@@ -443,6 +446,7 @@ const LIST: ExerciseDef[] = [
     startGuess: 4.5,
     muscles: ["Glutes", "Hamstrings", "Lower back"],
     images: photos("single-leg-glute-bridge"),
+    imageNote: "With a dumbbell, rest it across the crease of your hips and hold both ends, as in the glute bridge.",
     cues: [
       "Lie on your back with one foot flat and the other leg straight up or held in the air.",
       "Push through the heel of the planted foot and lift your hips until they're level.",
@@ -700,21 +704,49 @@ const LIST: ExerciseDef[] = [
     name: "Dumbbell dead bug",
     pattern: "core",
     kind: "reps",
-    load: "single",
+    load: "pair",
     perSide: true,
     startGuess: 2,
     prescription: { sets: 2, reps: [6, 10], rest: 45 },
     muscles: ["Deep core"],
     images: drawing("dumbbell-dead-bug"),
+    imageNote: "The dumbbell and leg that move are drawn solid; the faded ones stay where they are.",
     cues: [
-      "Lie on your back holding one dumbbell by its ends straight above your chest.",
+      "Lie on your back with a light dumbbell in each hand, arms pointing straight at the ceiling.",
       "Lift your knees to 90° above your hips and gently press your lower back into the floor.",
-      "Slowly straighten one leg towards the floor while the dumbbell stays still, then bring it back.",
-      "Switch legs. Count the reps on each side.",
+      "Slowly lower one dumbbell back over your head while you straighten the opposite leg towards the floor. Only go as far as your lower back stays down.",
+      "Bring them back and switch sides. Count the reps on each side.",
     ],
-    mistakes: ["Lower back lifting off the floor — make the movement smaller.", "Letting the dumbbell drift over your face."],
-    back: "Like the dead bug, with the dumbbell making your stomach work harder to keep your back still. Start with the empty handle.",
+    mistakes: [
+      "Lower back lifting off the floor — make the movement smaller.",
+      "Letting the dumbbell drop back fast — lower it as slowly as the leg.",
+    ],
+    back: "The dead bug with light dumbbells: your stomach works harder to keep your back still. Start with the empty handles.",
     video: "dumbbell dead bug exercise",
+  },
+  {
+    id: "dumbbell-dead-bug-single",
+    name: "Dumbbell dead bug (one dumbbell)",
+    pattern: "core",
+    kind: "reps",
+    load: "single",
+    perSide: true,
+    startGuess: 2,
+    prescription: { sets: 2, reps: [6, 10], rest: 45 },
+    muscles: ["Deep core"],
+    images: drawing("dumbbell-dead-bug-single"),
+    cues: [
+      "Lie on your back holding one dumbbell in both hands, arms pointing straight at the ceiling.",
+      "Lift your knees to 90° above your hips and gently press your lower back into the floor.",
+      "Slowly lower the dumbbell back over your head while you straighten one leg towards the floor. Only go as far as your lower back stays down.",
+      "Bring them back and switch legs. Count the reps on each side.",
+    ],
+    mistakes: [
+      "Lower back lifting off the floor — make the movement smaller.",
+      "Letting the dumbbell drop back fast — lower it as slowly as the leg.",
+    ],
+    back: "The dead bug with a light dumbbell: your stomach works harder to keep your back still. Start with the empty handle.",
+    video: "dead bug with dumbbell overhead",
   },
 
   /* ---------------------------------------------------------------- *
